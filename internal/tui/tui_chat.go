@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"gojobs/internal/ai"
 	"gojobs/internal/jobpage"
 	"gojobs/internal/profile"
 	"gojobs/internal/provider"
@@ -44,8 +44,9 @@ func (m Model) handleChatTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleChatSend processes the current input and sends it to the AI provider.
-// If the input is a URL (http/https), it fetches the job page, loads the profile,
+// If the input contains a URL (http/https), it fetches the job page, loads the profile,
 // builds a grounded prompt, and uses that as context for the AI.
+// Any extra text is passed as a runtime note.
 func (m Model) handleChatSend() (tea.Model, tea.Cmd) {
 	input := strings.TrimSpace(m.chatInput)
 	if input == "" || m.chatLoading {
@@ -58,20 +59,56 @@ func (m Model) handleChatSend() (tea.Model, tea.Cmd) {
 		m.chatMessages = nil
 	}
 
-	isURL := strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://")
-
-	if isURL {
-		return m.handleURLSend(input)
+	// Check if input contains a URL
+	url, extraText := extractURL(input)
+	if url != "" {
+		return m.handleURLSend(url, extraText)
 	}
 
 	return m.handleTextSend(input)
 }
 
+// extractURL finds the first URL in the input and returns it plus any surrounding text as a note.
+func extractURL(input string) (url string, note string) {
+	lower := strings.ToLower(input)
+	for _, prefix := range []string{"https://", "http://"} {
+		idx := strings.Index(lower, prefix)
+		if idx < 0 {
+			continue
+		}
+		// Extract URL: from prefix to next space or end of string
+		urlStart := idx
+		urlEnd := len(input)
+		if spaceIdx := strings.Index(input[urlStart:], " "); spaceIdx >= 0 {
+			urlEnd = urlStart + spaceIdx
+		}
+
+		url = input[urlStart:urlEnd]
+		// Build extra note from surrounding text
+		before := strings.TrimSpace(input[:urlStart])
+		after := strings.TrimSpace(input[urlEnd:])
+		if before != "" && after != "" {
+			note = before + " " + after
+		} else if before != "" {
+			note = before
+		} else if after != "" {
+			note = after
+		}
+		return url, note
+	}
+	return "", ""
+}
+
 // handleURLSend fetches a job page from a URL, builds a grounded prompt with
 // the candidate profile, and sends it to the AI for analysis.
-func (m Model) handleURLSend(url string) (tea.Model, tea.Cmd) {
-	// Show URL as user message
-	m.chatSession.AddMessage("user", url)
+// extraText is any additional user text surrounding the URL (used as a runtime note).
+func (m Model) handleURLSend(url string, extraText string) (tea.Model, tea.Cmd) {
+	// Show the full user input as a message
+	displayText := url
+	if extraText != "" {
+		displayText = extraText + " " + url
+	}
+	m.chatSession.AddMessage("user", displayText)
 	m.chatMessages = m.chatSession.Messages
 	m.chatInput = ""
 	m.chatLoading = true
@@ -106,8 +143,8 @@ func (m Model) handleURLSend(url string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Build grounded prompt (reuse existing prompt builder from internal/ai)
-	prompt := ai.BuildCompactPrompt(candidateProfile, page, "")
+	// Build grounded prompt, passing extraText as the runtime note
+	prompt := buildChatPrompt(candidateProfile, page, extraText)
 
 	// Add the prompt as system context to the conversation
 	m.chatSession.AddMessage("system", prompt)
@@ -129,7 +166,6 @@ func (m Model) handleURLSend(url string) (tea.Model, tea.Cmd) {
 	}
 
 	// Build provider messages from full session history.
-	// The system message (grounded prompt) is first, followed by user/AI turns.
 	var providerMsgs []provider.Message
 	for _, msg := range m.chatMessages {
 		providerMsgs = append(providerMsgs, provider.Message{
