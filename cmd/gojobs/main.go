@@ -11,10 +11,15 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"gojobs/internal/ai"
 	"gojobs/internal/config"
 	"gojobs/internal/jobpage"
 	"gojobs/internal/profile"
+	"gojobs/internal/provider"
+	"gojobs/internal/session"
+	"gojobs/internal/tui"
 )
 
 func main() {
@@ -22,11 +27,79 @@ func main() {
 }
 
 func run() int {
+	args := os.Args[1:]
+
+	// Check if TUI mode or CLI mode
+	if isTUIMode(args) {
+		return runTUI()
+	}
+	return runCLI()
+}
+
+// isTUIMode determines whether to launch the TUI based on flags and env.
+// Returns true when no CLI-forcing flags (-url, -cli) are present and
+// GOJOBS_MODE is not set to "cli".
+func isTUIMode(args []string) bool {
+	if os.Getenv("GOJOBS_MODE") == "cli" {
+		return false
+	}
+	for _, arg := range args {
+		if arg == "-url" || arg == "--url" || arg == "-cli" || arg == "--cli" {
+			return false
+		}
+	}
+	return true
+}
+
+// runCLI runs the existing one-shot CLI flow (identical to previous behavior).
+func runCLI() int {
 	if err := runMain(context.Background(), os.Stdout, os.Stderr, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
+	return 0
+}
 
+// runTUI launches the BubbleTea TUI chat interface.
+//
+// Smoke test checklist for manual verification:
+//  1. go run ./cmd/gojobs → TUI should open
+//  2. Paste a job URL in the input, press Enter → AI should respond with intro message
+//  3. Type a follow-up question, press Enter → AI should respond with context awareness
+//  4. Switch model to gemma-4-26b-a4b-it → send another message → should use the new model
+//  5. Create a new session, switch between sessions
+//  6. Delete a session
+//  7. Ctrl+C to quit
+//  8. go run ./cmd/gojobs -url <link> → should still work as one-shot CLI
+//
+// The TUI launches even without an API key; API key is validated lazily on first send.
+func runTUI() int {
+	cfg := config.Load()
+	_ = cfg.Validate() // Don't fail — TUI can start without API key
+
+	// Create provider router
+	ctx := context.Background()
+	googleProvider, err := provider.NewGoogleProvider(ctx, cfg.GoogleAPIKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to initialize Google AI provider: %v\n", err)
+		// Continue anyway — user will see error in TUI
+	}
+
+	router := provider.NewRouter()
+	if googleProvider != nil {
+		router.Register(googleProvider)
+	}
+
+	// Create session store
+	sessionStore := session.NewStore("sessions", 10)
+
+	// Create and run TUI model
+	m := tui.NewModel(sessionStore, router)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
 	return 0
 }
 
@@ -44,6 +117,7 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 	promptOnly := fs.Bool("prompt-only", false, "Build and print the prompt without calling Google AI")
 	jsonOutput := fs.Bool("json", false, "Print raw JSON instead of the human-readable report")
 	timeout := fs.Duration("timeout", 4*time.Minute, "Timeout for fetching and model execution")
+	_ = fs.Bool("cli", false, "Force CLI mode (used by run() dispatch, ignored here)")
 
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return err
@@ -85,7 +159,7 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 		return err
 	}
 
-	service, err := ai.NewService(ctx, appConfig.APIKey)
+	service, err := ai.NewService(ctx, appConfig.GoogleAPIKey)
 	if err != nil {
 		return err
 	}

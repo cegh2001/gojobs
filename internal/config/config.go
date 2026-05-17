@@ -15,10 +15,13 @@ const (
 )
 
 type Config struct {
-	APIKey         string
-	Model          string
-	DefaultProfile string
-	HTTPTimeout    time.Duration
+	GoogleAPIKey    string
+	APIKey          string   // backward compat — mirrors GoogleAPIKey
+	AvailableModels []string // known model names
+	DefaultModel    string   // default model from env or constant
+	Model           string   // backward compat — mirrors DefaultModel
+	DefaultProfile  string
+	HTTPTimeout     time.Duration
 }
 
 func Load() Config {
@@ -47,15 +50,18 @@ func Load() Config {
 	}
 
 	return Config{
-		APIKey:         apiKey,
-		Model:          model,
-		DefaultProfile: DefaultProfilePath,
-		HTTPTimeout:    45 * time.Second,
+		GoogleAPIKey:    apiKey,
+		APIKey:          apiKey,
+		AvailableModels: []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"},
+		DefaultModel:    model,
+		Model:           model,
+		DefaultProfile:  DefaultProfilePath,
+		HTTPTimeout:     45 * time.Second,
 	}
 }
 
 func (c Config) Validate() error {
-	if strings.TrimSpace(c.APIKey) == "" {
+	if strings.TrimSpace(c.GoogleAPIKey) == "" {
 		return fmt.Errorf("missing GOOGLE_API_KEY or GEMINI_API_KEY")
 	}
 

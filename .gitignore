@@ -2,4 +2,5 @@
 .env.local
 .env.*.local
 coverage.out
+sessions/
 me/*.pdf
