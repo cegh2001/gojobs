@@ -61,11 +61,13 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 	ctx, cancel := context.WithTimeout(parent, *timeout)
 	defer cancel()
 
+	logStep(stderr, "Loading candidate profile...")
 	candidateProfile, err := profile.Load(*profilePath)
 	if err != nil {
 		return err
 	}
 
+	logStep(stderr, "Fetching job page...")
 	fetcher := jobpage.NewFetcher(*timeout)
 	page, err := fetcher.Fetch(ctx, *jobURL)
 	if err != nil {
@@ -87,11 +89,14 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 		return err
 	}
 
+	modelName := appConfig.ResolveModel(resolvedMode, *modelOverride)
+	logStep(stderr, "Calling model %s...", modelName)
 	response, err := service.Analyze(ctx, ai.Request{
-		Model:     appConfig.ResolveModel(resolvedMode, *modelOverride),
-		Profile:   candidateProfile,
-		Page:      page,
-		ExtraNote: note,
+		Model:          modelName,
+		Profile:        candidateProfile,
+		Page:           page,
+		ExtraNote:      note,
+		ProgressWriter: stderr,
 	})
 	if err != nil {
 		return err
@@ -105,6 +110,14 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 
 	renderResponse(stdout, response)
 	return nil
+}
+
+func logStep(w io.Writer, format string, args ...any) {
+	if w == nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(w, format+"\n", args...)
 }
 
 func renderResponse(w io.Writer, response ai.IntroRecommendation) {
