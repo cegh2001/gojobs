@@ -55,8 +55,20 @@ func TestTUIChatFlow(t *testing.T) {
 	tempDir := t.TempDir()
 	store := session.NewStore(tempDir, 10)
 
-	// Setup: create TUI model
+	// Setup: create TUI model with pre-typed input
 	m := NewModel(store, router)
+
+	// Pre-populate input by simulating typing before teatest
+	m.inputArea.Focus()
+	message := "Hello, this is a test message"
+	for _, r := range message {
+		m.inputArea, _ = m.inputArea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	// Verify input has text before launching teatest
+	if m.inputArea.Value() == "" {
+		t.Fatal("input area value is empty after pre-typing — setup failed")
+	}
 
 	// Launch TUI with teatest
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(120, 40))
@@ -64,13 +76,9 @@ func TestTUIChatFlow(t *testing.T) {
 	// Give the TUI time to render and load sessions
 	time.Sleep(500 * time.Millisecond)
 
-	// Simulate typing a message
-	tm.Type("Hello, this is a test message")
-	time.Sleep(300 * time.Millisecond)
-
 	// Send the message directly (bypass key handling for reliability)
 	tm.Send(SendMessageMsg{})
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 
 	// Send mock AI response via StreamTokenMsg
 	tm.Send(StreamTokenMsg{Token: "Mock "})
