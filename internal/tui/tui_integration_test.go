@@ -1,5 +1,17 @@
 //go:build integration
 
+// Package tui provides integration tests for the BubbleTea TUI.
+//
+// KNOWN ISSUE: Running this test alongside unit tests (without -run filter)
+// causes "fatal error: found bad pointer in Go heap" due to a sync.Pool
+// bug in charmbracelet/x/ansi used by teatest. This is an upstream issue,
+// not a gojobs bug.
+//
+// Workaround: Run integration tests separately:
+//
+//	go test -tags=integration -run TestTUIChatFlow ./internal/tui/...
+//
+// Do NOT run: go test -tags=integration ./...  (may crash)
 package tui
 
 import (
@@ -17,7 +29,6 @@ import (
 )
 
 // mockIntegrationProvider implements provider.Provider for integration tests.
-// It streams mock tokens without making real API calls.
 type mockIntegrationProvider struct {
 	name            string
 	supportedModels []string
@@ -57,17 +68,19 @@ func TestTUIChatFlow(t *testing.T) {
 
 	// Setup: create TUI model with pre-typed input
 	m := NewModel(store, router)
+	m.width = 80
+	m.height = 40
 
-	// Pre-populate input by simulating typing before teatest
-	m.inputArea.Focus()
+	// Pre-populate input by simulating typing
 	message := "Hello, this is a test message"
 	for _, r := range message {
-		m.inputArea, _ = m.inputArea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newModel.(Model)
 	}
 
 	// Verify input has text before launching teatest
-	if m.inputArea.Value() == "" {
-		t.Fatal("input area value is empty after pre-typing — setup failed")
+	if m.chatInput == "" {
+		t.Fatal("chatInput is empty after pre-typing — setup failed")
 	}
 
 	// Launch TUI with teatest
@@ -76,18 +89,12 @@ func TestTUIChatFlow(t *testing.T) {
 	// Give the TUI time to render and load sessions
 	time.Sleep(500 * time.Millisecond)
 
-	// Send the message directly (bypass key handling for reliability)
-	tm.Send(SendMessageMsg{})
-	time.Sleep(300 * time.Millisecond)
+	// Send Enter to trigger message send
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	time.Sleep(500 * time.Millisecond)
 
-	// Send mock AI response via StreamTokenMsg
-	tm.Send(StreamTokenMsg{Token: "Mock "})
-	tm.Send(StreamTokenMsg{Token: "response"})
-	time.Sleep(100 * time.Millisecond)
-
-	// Send stream completion
-	tm.Send(StreamDoneMsg{Content: "Mock response"})
-	time.Sleep(300 * time.Millisecond)
+	// Wait for the goroutine to finish streaming
+	time.Sleep(500 * time.Millisecond)
 
 	// Quit the program
 	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -98,23 +105,23 @@ func TestTUIChatFlow(t *testing.T) {
 	finalModel := final.(Model)
 
 	// Verify model state after the full flow
-	if finalModel.currentSession == nil {
-		t.Fatal("expected a current session after sending message")
+	if finalModel.chatSession == nil {
+		t.Fatal("expected a chat session after sending message")
 	}
 
 	// Session should have at least 2 messages: user message + AI response
-	if len(finalModel.currentSession.Messages) < 2 {
-		t.Fatalf("expected at least 2 messages in session (user + AI), got %d", len(finalModel.currentSession.Messages))
+	if len(finalModel.chatSession.Messages) < 2 {
+		t.Fatalf("expected at least 2 messages in session (user + AI), got %d", len(finalModel.chatSession.Messages))
 	}
 
 	// First message should be from user
-	userMsg := finalModel.currentSession.Messages[0]
+	userMsg := finalModel.chatSession.Messages[0]
 	if string(userMsg.Role) != "user" {
 		t.Errorf("first message role = %q, want user", userMsg.Role)
 	}
 
 	// Second message should be from assistant
-	aiMsg := finalModel.currentSession.Messages[1]
+	aiMsg := finalModel.chatSession.Messages[1]
 	if string(aiMsg.Role) != "assistant" {
 		t.Errorf("second message role = %q, want assistant", aiMsg.Role)
 	}
@@ -123,13 +130,13 @@ func TestTUIChatFlow(t *testing.T) {
 	}
 
 	// Loading should be false (stream completed)
-	if finalModel.loading {
-		t.Error("loading should be false after StreamDoneMsg")
+	if finalModel.chatLoading {
+		t.Error("chatLoading should be false after StreamDoneMsg")
 	}
 
 	// Verify final output is non-empty (rendered something)
 	finalOut := tm.FinalOutput(t, teatest.WithFinalTimeout(3*time.Second))
-	output := readAll(finalOut)
+	output := readAllStr(finalOut)
 	if len(output) < 100 {
 		t.Errorf("final output too short (%d bytes), expected rendered TUI content", len(output))
 	}
@@ -138,8 +145,8 @@ func TestTUIChatFlow(t *testing.T) {
 	}
 }
 
-// readAll reads all content from a reader.
-func readAll(r io.Reader) string {
+// readAllStr reads all content from a reader into a string.
+func readAllStr(r io.Reader) string {
 	var buf strings.Builder
 	data := make([]byte, 4096)
 	for {

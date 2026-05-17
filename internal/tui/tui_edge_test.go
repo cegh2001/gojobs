@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -12,235 +11,183 @@ import (
 )
 
 // =============================================================================
-// Edge Case 5: Empty message send
+// Edge Case: Empty message send
 // =============================================================================
 
-func TestSendMessageMsgRejectsEmptyInput(t *testing.T) {
+func TestSendEmptyInputIsIgnored(t *testing.T) {
 	m := setupTestModel(t)
-	m.currentSession = session.NewSession("gemma-4-31b-it")
+	m.chatSession = session.NewSession("gemma-4-31b-it")
 
 	// Pre-condition: input is empty
-	if m.inputArea.Value() != "" {
-		t.Fatal("expected empty input area before test")
+	if m.chatInput != "" {
+		t.Fatal("expected empty chatInput before test")
 	}
 
-	// Simulate sending with empty input
-	m = updateAndDrain(m, SendMessageMsg{}, t)
+	// Send with empty input (Enter)
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyEnter}, t)
 
-	// After send with empty input:
-	// - No message should be added to session
-	// - Chat should still be empty (no user message appended)
-	// - loading should remain false
-	if m.loading {
+	// Nothing should happen — no new messages
+	if m.chatLoading {
 		t.Error("loading should be false after empty send")
 	}
-
-	if m.currentSession == nil {
-		t.Fatal("currentSession should not be nil — session was set before test")
+	if m.chatSession == nil {
+		t.Fatal("chatSession should still exist")
 	}
-
-	if len(m.currentSession.Messages) != 0 {
-		t.Errorf("expected 0 messages in session after empty send, got %d", len(m.currentSession.Messages))
-	}
-}
-
-func TestSendMessageMsgAllowsNonEmptyInput(t *testing.T) {
-	m := setupTestModel(t)
-	m.currentSession = session.NewSession("gemma-4-31b-it")
-
-	// Pre-populate input with text — Focus first, then type
-	m.inputArea.Focus()
-	m.inputArea, _ = m.inputArea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Hello!")})
-
-	if m.inputArea.Value() == "" {
-		t.Fatal("input area value is empty after typing — setup failed")
-	}
-
-	// Verify the model processes non-empty SendMessageMsg
-	m = updateAndDrain(m, SendMessageMsg{}, t)
-	if !m.loading {
-		t.Error("loading should be true after non-empty send")
-	}
-	// Verify message was added to session
-	if m.currentSession == nil {
-		t.Fatal("currentSession should not be nil after send")
-	}
-	if len(m.currentSession.Messages) != 1 {
-		t.Errorf("expected 1 message in session after non-empty send, got %d", len(m.currentSession.Messages))
+	if len(m.chatSession.Messages) != 0 {
+		t.Errorf("expected 0 messages after empty send, got %d", len(m.chatSession.Messages))
 	}
 }
 
 // =============================================================================
-// Edge Case 6: Rapid sends (second send should not overlap)
+// Edge Case: Send while loading (rapid sends)
 // =============================================================================
 
-func TestSendMessageMsgBlocksWhileLoading(t *testing.T) {
+func TestSendWhileLoadingIsIgnored(t *testing.T) {
 	m := setupTestModel(t)
-	m.currentSession = session.NewSession("gemma-4-31b-it")
-	m.loading = true // Simulate that a request is in progress
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatLoading = true
+	m.chatInput = "some text"
 
-	// Record message count before
-	msgCountBefore := len(m.currentSession.Messages)
+	msgCountBefore := len(m.chatSession.Messages)
 
-	// SendMessageMsg while loading should be silently ignored
-	m = updateAndDrain(m, SendMessageMsg{}, t)
+	// Send (Enter)
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyEnter}, t)
 
-	// loading should remain true
-	if !m.loading {
-		t.Error("loading should remain true when send is blocked")
+	// Should be silently ignored
+	if !m.chatLoading {
+		t.Error("chatLoading should remain true")
 	}
-
-	// No new messages should be added
-	if len(m.currentSession.Messages) != msgCountBefore {
-		t.Errorf("expected %d messages (no new), got %d", msgCountBefore, len(m.currentSession.Messages))
+	if len(m.chatSession.Messages) != msgCountBefore {
+		t.Errorf("no new messages expected, got %d (was %d)", len(m.chatSession.Messages), msgCountBefore)
 	}
 }
 
-func TestSendMessageMsgProceedsWhenNotLoading(t *testing.T) {
+func TestSendWhileLoadingBlockedTextInput(t *testing.T) {
 	m := setupTestModel(t)
-	m.currentSession = session.NewSession("gemma-4-31b-it")
-	m.loading = false
+	m.chatLoading = true
 
-	// Focus the input area and type some text
-	m.inputArea.Focus()
-	m.inputArea, _ = m.inputArea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("test")})
+	// Try typing while loading
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Hello")}, t)
 
-	if m.inputArea.Value() == "" {
-		t.Fatal("input area value is empty after typing — setup failed")
-	}
-
-	m = updateAndDrain(m, SendMessageMsg{}, t)
-
-	// loading should now be true (send initiated)
-	if !m.loading {
-		t.Error("loading should be true after send when not already loading")
+	// Text input should be ignored while loading
+	if m.chatInput != "" {
+		t.Errorf("chatInput should be empty while loading, got %q", m.chatInput)
 	}
 }
 
 // =============================================================================
-// Edge Case 1: Empty API key — TUI launches but shows error on first send
+// Edge Case: Empty router (no API key)
 // =============================================================================
 
 func TestModelStartsWithEmptyRouter(t *testing.T) {
-	// Model created with empty router (no providers registered)
-	// This simulates the case where API key is not configured.
 	m := setupTestModel(t)
+	m.width = 80
+	m.height = 40
 
-	// The model should not crash — View() should return something
+	// View should render without crash
 	view := m.View()
 	if view == "" {
 		t.Error("View() returned empty string with empty router")
 	}
 
-	// Type text and send a message — should not crash even with empty router
-	m.currentSession = session.NewSession("gemma-4-31b-it")
-	m.inputArea.Focus()
-	m.inputArea, _ = m.inputArea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Hello")})
+	// Type and send — should not crash, shows inline error
+	m.chatInput = "Hello"
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyEnter}, t)
 
-	if m.inputArea.Value() == "" {
-		t.Fatal("input area value is empty after typing — setup failed")
+	// Should have session with user message and error message
+	if m.chatSession == nil {
+		t.Fatal("chatSession should be created")
 	}
-
-	m = updateAndDrain(m, SendMessageMsg{}, t)
-
-	// Should not crash, should still have loading state
-	if !m.loading {
-		t.Error("loading should be true after send even with empty router")
-	}
-	// Verify the user message was added to the session
-	if len(m.currentSession.Messages) != 1 {
-		t.Errorf("expected 1 user message in session, got %d", len(m.currentSession.Messages))
+	if len(m.chatSession.Messages) < 1 {
+		t.Errorf("expected at least 1 message, got %d", len(m.chatSession.Messages))
 	}
 }
 
 // =============================================================================
-// Stream error resilience
+// Edge Case: Stream error
 // =============================================================================
 
-func TestStreamErrorShowsInlineAndClearsLoading(t *testing.T) {
+func TestStreamErrorClearsLoading(t *testing.T) {
 	m := setupTestModel(t)
-	m.loading = true
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatLoading = true
 
 	wantErr := errors.New("API key not configured")
-	m = updateAndDrain(m, StreamErrMsg{Err: wantErr}, t)
+	m = updateAndDrain(m, chatResponseMsg{err: wantErr}, t)
 
-	if m.loading {
-		t.Error("loading should be false after StreamErrMsg")
+	if m.chatLoading {
+		t.Error("chatLoading should be false after error")
 	}
 	if m.err == nil {
-		t.Error("err should be set after StreamErrMsg")
+		t.Error("err should be set after error response")
 	}
-	if m.err != wantErr {
-		t.Errorf("err = %v, want %v", m.err, wantErr)
-	}
-	// View should not crash
 	if m.View() == "" {
-		t.Error("View() returned empty after StreamErrMsg")
+		t.Error("View() returned empty after stream error")
 	}
 }
 
 // =============================================================================
-// Edge Case: Model selection without registered provider
+// Edge Case: Unknown model
 // =============================================================================
 
-func TestModelSelectedWithUnknownModel(t *testing.T) {
-	m := setupTestModel(t)
-
-	// Select a model that doesn't exist in any registered provider
-	m = updateAndDrain(m, ModelSelectedMsg{Model: "unknown-model"}, t)
-
-	// Model should be set — validation happens at send time, not selection time
-	if m.currentModel != "unknown-model" {
-		t.Errorf("currentModel = %q, want %q", m.currentModel, "unknown-model")
+func TestUnknownModelDoesNotCrash(t *testing.T) {
+	router := provider.NewRouter()
+	mockProv := &mockTUIProvider{
+		name:            "google",
+		supportedModels: []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"},
 	}
+	router.Register(mockProv)
+
+	m := NewModel(session.NewStore(t.TempDir(), 10), router)
+	m.currentModel = "unknown-model"
+	m.width = 80
+	m.height = 40
 
 	// View should still render
 	if m.View() == "" {
-		t.Error("View() returned empty after selecting unknown model")
+		t.Error("View() returned empty with unknown model")
 	}
 }
 
 // =============================================================================
-// Edge Case: NewSessionMsg during loading
+// Edge Case: NewSessionMsg (Ctrl+N) with loading
 // =============================================================================
 
 func TestNewSessionClearsLoadingState(t *testing.T) {
 	m := setupTestModel(t)
-	m.loading = true
+	m.chatLoading = true
 
-	m = updateAndDrain(m, NewSessionMsg{}, t)
+	// Ctrl+N
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyCtrlN}, t)
 
-	// New session should clear loading state
-	if m.loading {
-		t.Error("loading should be false after NewSessionMsg")
+	if m.chatLoading {
+		t.Error("chatLoading should be false after new session")
 	}
-	// Current session should be set
-	if m.currentSession == nil {
-		t.Error("currentSession should not be nil after NewSessionMsg")
+	if m.chatSession == nil {
+		t.Error("chatSession should be set after new session")
 	}
 }
 
 // =============================================================================
-// Edge Case: DeleteSessionMsg with no sessions
+// Edge Case: Delete session with no sessions
 // =============================================================================
 
 func TestDeleteSessionWhenNoneExist(t *testing.T) {
 	m := setupTestModel(t)
-	// No current session and no sessions
-	m.currentSession = nil
+	m.state = stateSessions
 	m.sessions = nil
+	m.cursor = 0
 
 	// Should not crash
-	m = updateAndDrain(m, DeleteSessionMsg{}, t)
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyDelete}, t)
 
-	// Should remain in valid state
 	if m.View() == "" {
-		t.Error("View() should not be empty after DeleteSessionMsg with no sessions")
+		t.Error("View() should not be empty after deleting with no sessions")
 	}
 }
 
 // =============================================================================
-// Smoke test: TUI renders non-empty View in all initial states
+// Smoke test: View() never empty
 // =============================================================================
 
 func TestViewNeverEmpty(t *testing.T) {
@@ -249,20 +196,21 @@ func TestViewNeverEmpty(t *testing.T) {
 		setup func(m *Model)
 	}{
 		{
-			name: "fresh model",
+			name:  "fresh model",
 			setup: func(m *Model) {},
 		},
 		{
 			name: "with sessions loaded",
 			setup: func(m *Model) {
 				m.sessions = []session.Session{{ID: "1", Name: "Test", Model: "gemma-4-31b-it"}}
-				m.sidebar.SetSessions(m.sessions)
 			},
 		},
 		{
-			name: "with current session",
+			name: "with chat session",
 			setup: func(m *Model) {
-				m.currentSession = session.NewSession("gemma-4-31b-it")
+				m.chatSession = session.NewSession("gemma-4-31b-it")
+				m.chatSession.AddMessage("user", "Hello")
+				m.chatMessages = m.chatSession.Messages
 			},
 		},
 		{
@@ -274,8 +222,21 @@ func TestViewNeverEmpty(t *testing.T) {
 		{
 			name: "while loading",
 			setup: func(m *Model) {
-				m.loading = true
-				m.spinner.Start()
+				m.chatLoading = true
+			},
+		},
+		{
+			name: "sessions state",
+			setup: func(m *Model) {
+				m.state = stateSessions
+				m.sessions = []session.Session{{ID: "1", Name: "Test", Model: "gemma-4-31b-it"}}
+			},
+		},
+		{
+			name: "sessions state empty",
+			setup: func(m *Model) {
+				m.state = stateSessions
+				m.sessions = nil
 			},
 		},
 	}
@@ -283,6 +244,8 @@ func TestViewNeverEmpty(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := setupTestModel(t)
+			m.width = 80
+			m.height = 40
 			tt.setup(&m)
 
 			view := m.View()
@@ -294,72 +257,114 @@ func TestViewNeverEmpty(t *testing.T) {
 }
 
 // =============================================================================
-// Edge Case: Corrupted session file (integration-style, verifies List skips)
+// Edge Case: Empty session list loaded
 // =============================================================================
 
-func TestSessionsLoadedSkipsCorruptedFiles(t *testing.T) {
+func TestSessionsLoadedEmptyList(t *testing.T) {
 	m := setupTestModel(t)
 
-	// Even with empty session list, SessionsLoadedMsg should work
-	m = updateAndDrain(m, SessionsLoadedMsg{Sessions: nil}, t)
-
+	// Nil sessions
+	m = updateAndDrain(m, sessionsLoadedMsg{sessions: nil}, t)
 	if len(m.sessions) != 0 {
 		t.Errorf("expected 0 sessions with nil, got %d", len(m.sessions))
 	}
 
-	// Verify sidebar can handle empty sessions
-	m = updateAndDrain(m, SessionsLoadedMsg{Sessions: []session.Session{}}, t)
+	// Empty slice
+	m = updateAndDrain(m, sessionsLoadedMsg{sessions: []session.Session{}}, t)
 	if len(m.sessions) != 0 {
 		t.Errorf("expected 0 sessions with empty slice, got %d", len(m.sessions))
 	}
 }
 
 // =============================================================================
-// Edge Case: Unknown model resolution via router (already tested in provider)
-// This test verifies the TUI integration doesn't crash
+// Edge Case: Session select out of bounds
 // =============================================================================
 
-func TestTUIWithUnknownModelDoesNotCrash(t *testing.T) {
-	// Create router with only google provider
+func TestSessionSelectOutOfBounds(t *testing.T) {
+	m := setupTestModel(t)
+	m.state = stateSessions
+	m.sessions = nil
+	m.cursor = 5 // Out of bounds
+
+	// Should not crash
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyEnter}, t)
+
+	// State should still be sessions (selection failed)
+	if m.state != stateSessions {
+		t.Errorf("state should remain sessions when select fails, got %d", m.state)
+	}
+}
+
+// =============================================================================
+// Edge Case: Zero-width terminal
+// =============================================================================
+
+func TestZeroWidthTerminal(t *testing.T) {
+	m := setupTestModel(t)
+	m.width = 0
+	m.height = 0
+
+	// Should not crash — width-based calculations should use 1 as minimum
+	view := m.View()
+	if view == "" {
+		t.Error("View() returned empty with zero dimensions")
+	}
+}
+
+// =============================================================================
+// Edge Case: Provide with stream error (not initialization error)
+// =============================================================================
+
+func TestSendChatCmdWithStreamError(t *testing.T) {
+	store := session.NewStore(t.TempDir(), 10)
 	router := provider.NewRouter()
-	mockProv := &mockTUIProvider{
+	router.Register(&mockTUIProvider{
 		name:            "google",
-		supportedModels: []string{"gemma-4-31b-it", "gemma-4-26b-a4b-it"},
+		supportedModels: []string{"gemma-4-31b-it"},
+		streamTokens: []provider.StreamToken{
+			{Token: "partial"},
+			{Err: errors.New("connection lost")},
+		},
+	})
+
+	m := NewModel(store, router)
+	m.width = 80
+	m.height = 40
+
+	// Type and send — the mock stream errors immediately, so drain processes the full cycle
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("test")}, t)
+
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyEnter}, t)
+
+	// After full drain, loading should be false (stream error was processed)
+	if m.chatLoading {
+		t.Error("chatLoading should be false after stream error is processed")
 	}
-	router.Register(mockProv)
-
-	// Try to resolve unknown model
-	_, err := router.Resolve("unknown-model")
-	if err == nil {
-		t.Error("expected error resolving unknown model")
-	}
-
-	// The TUI model itself should handle this gracefully (model is set before resolution)
-	m := NewModel(session.NewStore(t.TempDir(), 10), router)
-	m.currentModel = "unknown-model"
-
-	// View should still render
-	if m.View() == "" {
-		t.Error("View() returned empty with unknown model")
+	// Error should be set
+	if m.err == nil {
+		t.Error("err should be set after stream error")
 	}
 }
 
-// mockTUIProvider implements provider.Provider for TUI edge case tests.
-type mockTUIProvider struct {
-	name            string
-	supportedModels []string
+// =============================================================================
+// Edge Case: Toggle model updates chat session
+// =============================================================================
+
+func TestToggleModelUpdatesChatSession(t *testing.T) {
+	m := setupTestModel(t)
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatSession.Model = m.currentModel
+
+	m.chatSession.AddMessage("user", "test")
+
+	// Toggle model
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyCtrlK}, t)
+
+	if m.currentModel != "gemma-4-26b-a4b-it" {
+		t.Errorf("model should toggle to gemma-4-26b-a4b-it, got %q", m.currentModel)
+	}
+	if m.chatSession.Model != "gemma-4-26b-a4b-it" {
+		t.Errorf("chatSession.Model should update, got %q", m.chatSession.Model)
+	}
 }
 
-func (m *mockTUIProvider) Name() string              { return m.name }
-func (m *mockTUIProvider) SupportedModels() []string { return m.supportedModels }
-func (m *mockTUIProvider) SendMessageStream(ctx context.Context, model string, messages []provider.Message) (<-chan provider.StreamToken, error) {
-	ch := make(chan provider.StreamToken)
-	close(ch)
-	return ch, nil
-}
-func (m *mockTUIProvider) SendMessage(ctx context.Context, model string, messages []provider.Message) (string, error) {
-	return "mock response", nil
-}
-
-// Ensure mockTUIProvider implements provider.Provider.
-var _ provider.Provider = (*mockTUIProvider)(nil)

@@ -390,10 +390,14 @@ func TestLRUEvictOldestRemovesOldestWhenAtCapacity(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		sess := NewSession("gemma-4-31b-it")
-		sess.UpdatedAt = now.Add(time.Duration(i) * time.Minute)
 		sess.Name = "Session " + string(rune('A'+i))
 		if err := store.Save(sess); err != nil {
 			t.Fatalf("Save(%d) error = %v", i, err)
+		}
+		// UpdatedAt must be set AFTER Save because Save overwrites it with time.Now()
+		sess.UpdatedAt = now.Add(time.Duration(i) * time.Minute)
+		if err := store.Save(sess); err != nil {
+			t.Fatalf("Save(%d) after UpdatedAt fix error = %v", i, err)
 		}
 		sessions = append(sessions, *sess)
 	}
