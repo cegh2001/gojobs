@@ -1,0 +1,219 @@
+{
+  "name": "Carlos Eduardo Gonzalez Henriquez",
+  "headline": "Artificial Intelligence Engineer and Full Stack Developer focused on autonomous systems, LLM orchestration, computer vision, RAG, MCP, and React/Next.js product delivery.",
+  "location": "La Guaira, Venezuela",
+  "languages": [
+    "Spanish (native)",
+    "English (B2 / intermediate)"
+  ],
+  "education": [
+    {
+      "institution": "Universidad Nacional Experimental Maritima del Caribe",
+      "degree": "Computer Engineering",
+      "location": "La Guaira, Venezuela",
+      "graduation": "July 2026"
+    }
+  ],
+  "other_skills": [
+    "Web development proficiency.",
+    "Knowledge and studies in artificial intelligence since 2023.",
+    "DevSecOps certified with a focus on cybersecurity."
+  ],
+  "public_links": [
+    "https://github.com/cegh2001",
+    "https://linkedin.com/in/carlos-eduardo-gonzalez-henriquez"
+  ],
+  "positioning": [
+    "Combines AI engineering with product and full stack delivery instead of staying only at the model or research layer.",
+    "Comfortable translating operational domains like logistics, ports, telecom, legal operations, finance, and fitness into software products.",
+    "Has direct experience integrating AI systems with hardware-oriented environments in telecom and logistics, not only software-only workflows.",
+    "Recent GitHub activity across public and private repositories shows active work in Go, Gemini/Gemma integration, MCP servers, human handover dashboards, and modern Next.js 16 applications."
+  ],
+  "verified_highlights": [
+    "Built G-Aereo, a logistics system that automated warehouse flows from import to export and billing at Gonavi.",
+    "Built port automation and anomaly-detection workflows with YOLOv11 and Python for container entries, exits, and monitoring.",
+    "Specialized in RAG architectures, Model Context Protocol (MCP), and computer vision model training.",
+    "Built enterprise RAG knowledge bases with embeddings and retrieval-augmented generation for corporate use cases.",
+    "Integrated SmartOLT, PostgreSQL, GLPI, MCP, and language models at Sisprot Global Fiber, reducing network fault identification time by 38%.",
+    "Migrated microservices and MCP servers from n8n to Bun and Hono at Sisprot Global Fiber, reducing response latency by 90% and automating 100% of initial ticket categorization and generation.",
+    "Built legal operations and financial admin modules at LegalContigo for a portfolio of more than 100 clients.",
+    "Built conversational UI flows for human handover support in React/Next.js and SPA environments.",
+    "Public repo GoDojo shows active work shipping a Go TUI with Gemma 4 via Gemini API, Bubbletea, testing, and hexagonal architecture.",
+    "Authenticated GitHub access verifies active private work on Next.js 16 and React 19 systems covering POS, finance, legal operations, MCP servers, support handover, and AI-assisted nutrition workflows."
+  ],
+  "experience": [
+    {
+      "company": "Gonavi, C.A.",
+      "role": "AI Engineer",
+      "period": "2024-02 to present",
+      "source": "AI CV text provided by user on 2026-05-16",
+      "highlights": [
+        "Trained and integrated real-time object detection models with YOLOv11 and Python for port automation, container entrance and exit control, and anomaly detection.",
+        "Built a robust enterprise knowledge base using embeddings and RAG to improve precision and relevance in corporate environments.",
+        "Applied fine-tuning techniques to OpenAI architectures to align responses with corporate identity and integrated multichannel capabilities with OpenAI and ElevenLabs.",
+        "Built a React/Next.js SPA conversational UI with chat-bubble interaction and human handover flows for support staff.",
+        "Worked on an experimental LLM plus MetaHuman avatar prototype in Unreal Engine with synchronized AI responses, real-time physics, and animations."
+      ]
+    },
+    {
+      "company": "Gonavi, C.A.",
+      "role": "Web Developer",
+      "period": "2024-02 to present",
+      "source": "Web CV text provided by user on 2026-05-16",
+      "highlights": [
+        "Developed critical frontend and backend modules for G-Aereo, an air warehouse operating system covering import, export, and billing flows.",
+        "Developed critical frontend and backend modules for Stormy Vision, a port monitoring system covering container operations, visualization of arrivals and departures, and route tracking with maps.",
+        "Built responsive Next.js/React and Tailwind interfaces enriched with Framer Motion animations."
+      ]
+    },
+    {
+      "company": "Sisprot Global Fiber",
+      "role": "AI Engineer",
+      "period": "2026-01 to 2026-04",
+      "source": "AI CV text provided by user on 2026-05-16",
+      "highlights": [
+        "Implemented an autonomous monitoring system for fiber infrastructure with SmartOLT and language models.",
+        "Automated diagnosis of OLTs, ONUs, and ODBs using MCP and context cache tools, reducing network fault identification time by 38%.",
+        "Architected a Level 1 support ecosystem connecting AI, PostgreSQL, and GLPI.",
+        "Designed and migrated MCP servers and microservices from n8n to Bun and Hono, reducing latency by 90% and automating 100% of initial ticket categorization and generation."
+      ]
+    },
+    {
+      "company": "LegalContigo",
+      "role": "Frontend Developer",
+      "period": "2026-01 to present",
+      "source": "Web CV text provided by user on 2026-05-16",
+      "highlights": [
+        "Designed and implemented five independent role-based management modules for lawyers and administration.",
+        "Developed the financial ecosystem of the admin panel including invoicing, quotes, and payment method management.",
+        "Helped streamline operations for a portfolio of 100+ clients with scheduling, availability, and case lifecycle tooling."
+      ]
+    },
+    {
+      "company": "Independent and product work",
+      "role": "Full Stack Developer",
+      "period": "2021-03 to present",
+      "source": "Web CV text provided by user on 2026-05-16",
+      "highlights": [
+        "Built VE-Commerce, a multitenant POS and inventory system with multi-currency logic for USD, EUR, and BSD plus automated IGTF tax calculations using Next.js and Supabase.",
+        "Built Arepa Fit, an interactive nutrition platform focused on calorie counting, nutritional plan management, UX, and application state management.",
+        "Built conversational UI and payment portal flows in React/Next.js with human handover support."
+      ]
+    }
+  ],
+  "public_projects": [
+    {
+      "name": "GoDojo",
+      "source": "Public GitHub repo cegh2001/godojo",
+      "highlights": [
+        "Go-only codebase focused on a Bubbletea TUI for learning Go with strict testing and Gemma 4 support via Gemini API.",
+        "Readme shows explicit support for gemma-4-26b-a4b-it and gemma-4-31b-it.",
+        "Shows recent work on hexagonal architecture, testing, and agentic tutoring flows."
+      ]
+    },
+    {
+      "name": "Siberiano",
+      "source": "Public GitHub repo cegh2001/siberiano",
+      "highlights": [
+        "Next.js TypeScript portfolio site with recent UI work, carousel interactions, and styling changes.",
+        "Demonstrates ongoing hands-on product and frontend work in modern web tooling."
+      ]
+    },
+    {
+      "name": "openai-devassistant",
+      "source": "Public GitHub repo cegh2001/openai-devassistant",
+      "highlights": [
+        "Earlier AI assistant project combining OpenAI, ElevenLabs, audio transcription, and a Gradio interface.",
+        "Shows a longer track record of working on multimodal and voice-enabled AI products."
+      ]
+    }
+  ],
+  "private_projects": [
+    {
+      "name": "ve-commerce",
+      "source": "Private GitHub repo cegh2001/ve-commerce verified via authenticated GitHub access on 2026-05-16",
+      "highlights": [
+        "Next.js 16 and React 19 private SaaS with POS, inventory, anomalies, debts, credits, reports, subscriptions, exchange rates, and admin flows.",
+        "Uses Supabase SSR, SWR, Recharts, Vitest, and Playwright, which supports the claim of full stack product work beyond a simple prototype.",
+        "Corroborates multitenant retail and financial operations experience with concrete modules for orders, payments, product imports, and reporting."
+      ]
+    },
+    {
+      "name": "legalcontigo-front-admin-copy",
+      "source": "Private GitHub repo cegh2001/legalcontigo-front-admin-copy verified via authenticated GitHub access on 2026-05-16",
+      "highlights": [
+        "Next.js 16 private legal operations platform with separate admin, client, and lawyer areas.",
+        "Includes concrete finance modules for invoices, estimates, payments, payment methods, accounts, and banks, plus scheduling, guards, cases, sub-cases, leads, and plans.",
+        "Corroborates role-based product work at LegalContigo with TanStack Query, TanStack Table, NextAuth, and complex case-management flows."
+      ]
+    },
+    {
+      "name": "mcp-sisprot",
+      "source": "Private GitHub repo cegh2001/mcp-sisprot verified via authenticated GitHub access on 2026-05-16",
+      "highlights": [
+        "Private MCP server project with resources, tools, memory, RAG, search, handover tools, context cache, and SmartOLT/Sisprot service integrations.",
+        "Uses @modelcontextprotocol/sdk, Supabase, Next.js 16, and Gemini-oriented tooling, matching the MCP and production AI claims from the CV.",
+        "Provides direct repository evidence for AI infrastructure work around telecom support, tool execution, memory, and operational diagnostics."
+      ]
+    },
+    {
+      "name": "handover-copy",
+      "source": "Private GitHub repo cegh2001/handover-copy verified via authenticated GitHub access on 2026-05-16",
+      "highlights": [
+        "Private support dashboard with MCP chat routes, realtime conversation hooks, agent stats, takeover dialogs, pause dialogs, and close dialogs.",
+        "Corroborates conversational UI and human-handover experience with a concrete product artifact instead of only CV text.",
+        "Built with Next.js 16, React 19, Supabase, and dashboard components for live operational support workflows."
+      ]
+    },
+    {
+      "name": "arepafit",
+      "source": "Private GitHub repo cegh2001/arepafit verified via authenticated GitHub access on 2026-05-16",
+      "highlights": [
+        "Private nutrition platform with calorie tracking, patient and professional flows, subscription payments, automation, and admin tooling.",
+        "Includes AI-oriented modules such as foods-ai-tracker, food proposals, food review pipelines, and dependencies on @google/genai and @modelcontextprotocol/sdk.",
+        "Corroborates ongoing product and AI-assisted health-platform work beyond the brief CV mention of Arepa Fit."
+      ]
+    }
+  ],
+  "preferred_angles": [
+    {
+      "name": "domain-business",
+      "when_to_use": "Use when the role is tied to logistics, distributors, warehouses, operations, manufacturing, finance, or domain-heavy workflows.",
+      "proof_points": [
+        "G-Aereo warehouse and billing automation at Gonavi.",
+        "Stormy Vision port monitoring and operational visibility.",
+        "LegalContigo operational and financial workflow modules.",
+        "ve-commerce POS, debts, credits, reporting, and exchange-rate modules verified in a private repository."
+      ]
+    },
+    {
+      "name": "ai-agents",
+      "when_to_use": "Use when the role is about LLMs, agentic workflows, RAG, MCP, production AI, latency, or system orchestration.",
+      "proof_points": [
+        "Enterprise RAG systems and knowledge bases at Gonavi.",
+        "MCP and microservice migration plus latency gains at Sisprot Global Fiber.",
+        "Public GoDojo work with Gemma 4 through Gemini API.",
+        "Private mcp-sisprot repository with MCP tools, memory, RAG, SmartOLT, and telecom support integrations.",
+        "Private ArepaFit repository with AI food-tracking and proposal/review workflows."
+      ]
+    },
+    {
+      "name": "product-fullstack",
+      "when_to_use": "Use when the role emphasizes Next.js, TypeScript, product ownership, UX, shipping fast, and customer-facing platforms.",
+      "proof_points": [
+        "Next.js/React and Tailwind work at Gonavi and LegalContigo.",
+        "Multitenant SaaS and finance logic in VE-Commerce.",
+        "Recent frontend product work in the Siberiano repo.",
+        "Private handover-copy repository with realtime support dashboards and operator takeover flows.",
+        "Private LegalContigo admin repository with role-based case, finance, and scheduling interfaces."
+      ]
+    }
+  ],
+  "guardrails": [
+    "Use only facts supported by this dossier, the job page, or explicit runtime notes.",
+    "Do not claim relocation plans, visa status, salary preferences, or company-internal/private details beyond the verified high-level repository evidence captured here unless they are explicitly provided at runtime.",
+    "Do not overstate English beyond B2 or intermediate.",
+    "Do not invent metrics beyond the verified 38%, 90%, 100%, and 100+ client signals already included here.",
+    "Do not fabricate direct founder relationships, prior titles like Lead AI Engineer, or employer stack details that are not in evidence."
+  ]
+}
