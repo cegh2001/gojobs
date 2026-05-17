@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -17,10 +18,12 @@ import (
 
 type Request struct {
 	Model          string
+	FallbackModel  string
 	Profile        profile.Profile
 	Page           jobpage.Page
 	ExtraNote      string
 	ProgressWriter io.Writer
+	CompactPrompt  bool
 }
 
 type Service struct {
@@ -41,55 +44,93 @@ func NewService(ctx context.Context, apiKey string) (*Service, error) {
 
 func (s *Service) Analyze(ctx context.Context, req Request) (IntroRecommendation, error) {
 	prompt := BuildPrompt(req.Profile, req.Page, req.ExtraNote)
-	temperature := float32(0.35)
-	stopProgress := startProgressHeartbeat(ctx, req.ProgressWriter, req.Model, len(prompt))
-	defer stopProgress()
+	if req.CompactPrompt {
+		prompt = BuildCompactPrompt(req.Profile, req.Page, req.ExtraNote)
+	}
 
-	stream := s.client.Models.GenerateContentStream(ctx, req.Model, genai.Text(prompt), &genai.GenerateContentConfig{
-		ResponseMIMEType:   "application/json",
-		ResponseJsonSchema: ResponseSchema(),
-		Temperature:        &temperature,
-		CandidateCount:     1,
-		MaxOutputTokens:    1000,
-	})
+	firstAttemptCtx := ctx
+	firstAttemptCancel := func() {}
+	if req.FallbackModel != "" {
+		firstAttemptCtx, firstAttemptCancel = deriveFastAttemptContext(ctx, 35*time.Second)
+	}
+	defer firstAttemptCancel()
 
-	var streamedText strings.Builder
-	var lastChunk string
-	var sawStreamText bool
+	recommendation, err := s.generateRecommendation(firstAttemptCtx, req.Model, prompt, req.ProgressWriter)
+	if err == nil {
+		return recommendation, nil
+	}
 
-	for response, err := range stream {
-		if err != nil {
-			return IntroRecommendation{}, fmt.Errorf("generate content with model %q: %w", req.Model, err)
+	var structuredErr *structuredOutputError
+	if req.FallbackModel != "" && req.FallbackModel != req.Model && ctx.Err() == nil && (errors.As(err, &structuredErr) || errors.Is(err, context.DeadlineExceeded) || isFallbackableModelError(err)) {
+		if req.ProgressWriter != nil {
+			if errors.Is(err, context.DeadlineExceeded) || isFallbackableModelError(err) {
+				_, _ = fmt.Fprintf(req.ProgressWriter, "%s hit the fast-mode time budget. Retrying with %s...\n", req.Model, req.FallbackModel)
+			} else {
+				_, _ = fmt.Fprintf(req.ProgressWriter, "%s returned invalid structured output. Retrying with %s...\n", req.Model, req.FallbackModel)
+			}
 		}
 
-		chunkText := strings.TrimSpace(response.Text())
-		if chunkText == "" {
+		return s.generateRecommendation(ctx, req.FallbackModel, prompt, req.ProgressWriter)
+	}
+
+	return IntroRecommendation{}, err
+}
+
+func (s *Service) generateRecommendation(ctx context.Context, model string, prompt string, progressWriter io.Writer) (IntroRecommendation, error) {
+	temperature := float32(0.2)
+	stopProgress := startProgressHeartbeat(ctx, progressWriter, model, len(prompt))
+	defer stopProgress()
+
+	var response *genai.GenerateContentResponse
+	var err error
+	for attempt := 1; attempt <= 2; attempt++ {
+		response, err = s.client.Models.GenerateContent(ctx, model, genai.Text(prompt), &genai.GenerateContentConfig{
+			ResponseMIMEType:   "application/json",
+			ResponseJsonSchema: ResponseSchema(),
+			Temperature:        &temperature,
+			CandidateCount:     1,
+			MaxOutputTokens:    900,
+		})
+		if err == nil {
+			break
+		}
+
+		if ctx.Err() != nil {
+			return IntroRecommendation{}, fmt.Errorf("model %q did not finish before timeout: %w", model, ctx.Err())
+		}
+
+		if attempt == 1 && isRetryableModelError(err) {
+			if progressWriter != nil {
+				_, _ = fmt.Fprintf(progressWriter, "%s returned a transient upstream error. Retrying once...\n", model)
+			}
 			continue
 		}
 
-		if !sawStreamText && req.ProgressWriter != nil {
-			_, _ = fmt.Fprintf(req.ProgressWriter, "%s started streaming a response...\n", req.Model)
-			sawStreamText = true
-		}
-
-		lastChunk = chunkText
-		streamedText.WriteString(chunkText)
+		return IntroRecommendation{}, fmt.Errorf("generate content with model %q: %w", model, err)
 	}
 
-	if err := ctx.Err(); err != nil {
-		return IntroRecommendation{}, fmt.Errorf("model %q did not finish before timeout: %w", req.Model, err)
+	if progressWriter != nil {
+		_, _ = fmt.Fprintln(progressWriter, "Model response received. Parsing JSON...")
 	}
 
-	if req.ProgressWriter != nil {
-		_, _ = fmt.Fprintln(req.ProgressWriter, "Model response received. Parsing JSON...")
-	}
-
-	recommendation, err := decodeRecommendationPayload(lastChunk, streamedText.String())
+	recommendation, err := decodeRecommendationPayload(strings.TrimSpace(response.Text()))
 	if err != nil {
-		return IntroRecommendation{}, err
+		return IntroRecommendation{}, &structuredOutputError{err: err}
 	}
 
 	return recommendation, nil
+}
+
+type structuredOutputError struct {
+	err error
+}
+
+func (e *structuredOutputError) Error() string {
+	return e.err.Error()
+}
+
+func (e *structuredOutputError) Unwrap() error {
+	return e.err
 }
 
 func decodeRecommendationPayload(payloads ...string) (IntroRecommendation, error) {
@@ -147,4 +188,40 @@ func startProgressHeartbeat(ctx context.Context, writer io.Writer, model string,
 			close(done)
 		})
 	}
+}
+
+func deriveFastAttemptContext(parent context.Context, maxBudget time.Duration) (context.Context, context.CancelFunc) {
+	deadline, ok := parent.Deadline()
+	if !ok {
+		return context.WithTimeout(parent, maxBudget)
+	}
+
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return parent, func() {}
+	}
+
+	budget := remaining / 3
+	if budget > maxBudget {
+		budget = maxBudget
+	}
+	if budget < 10*time.Second {
+		return parent, func() {}
+	}
+
+	return context.WithTimeout(parent, budget)
+}
+
+func isRetryableModelError(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "Error 500") ||
+		strings.Contains(message, "Status: INTERNAL") ||
+		strings.Contains(message, "Error 503") ||
+		strings.Contains(message, "Status: UNAVAILABLE")
+}
+
+func isFallbackableModelError(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "Error 504") ||
+		strings.Contains(message, "DEADLINE_EXCEEDED")
 }

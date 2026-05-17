@@ -76,7 +76,12 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 
 	note := strings.TrimSpace(*extraNote)
 	if *promptOnly {
-		_, err := io.WriteString(stdout, ai.BuildPrompt(candidateProfile, page, note)+"\n")
+		prompt := ai.BuildPrompt(candidateProfile, page, note)
+		if resolvedMode == "fast" {
+			prompt = ai.BuildCompactPrompt(candidateProfile, page, note)
+		}
+
+		_, err := io.WriteString(stdout, prompt+"\n")
 		return err
 	}
 
@@ -90,13 +95,19 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 	}
 
 	modelName := appConfig.ResolveModel(resolvedMode, *modelOverride)
+	fallbackModel := ""
+	if resolvedMode == "fast" {
+		fallbackModel = appConfig.HeavyModel
+	}
 	logStep(stderr, "Calling model %s...", modelName)
 	response, err := service.Analyze(ctx, ai.Request{
 		Model:          modelName,
+		FallbackModel:  fallbackModel,
 		Profile:        candidateProfile,
 		Page:           page,
 		ExtraNote:      note,
 		ProgressWriter: stderr,
+		CompactPrompt:  resolvedMode == "fast",
 	})
 	if err != nil {
 		return err
