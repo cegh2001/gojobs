@@ -38,6 +38,7 @@ type Model struct {
 	chatLoading  bool
 	chatScroll   int // 0 = bottom, positive = scroll up
 	currentModel string
+	profilePath  string // path to candidate profile JSON
 
 	// Sessions state
 	sessions []session.Session
@@ -45,7 +46,7 @@ type Model struct {
 }
 
 // NewModel creates a new TUI Model with the given dependencies.
-func NewModel(store *session.Store, router *provider.Router) Model {
+func NewModel(store *session.Store, router *provider.Router, profilePath string) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = spinnerStyle
@@ -56,6 +57,7 @@ func NewModel(store *session.Store, router *provider.Router) Model {
 		providerRouter: router,
 		spinner:        sp,
 		currentModel:   "gemma-4-31b-it",
+		profilePath:    profilePath,
 	}
 }
 

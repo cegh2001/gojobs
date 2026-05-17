@@ -138,7 +138,7 @@ func TestUnknownModelDoesNotCrash(t *testing.T) {
 	}
 	router.Register(mockProv)
 
-	m := NewModel(session.NewStore(t.TempDir(), 10), router)
+	m := NewModel(session.NewStore(t.TempDir(), 10), router, "profiles/carlos_gonzalez.json")
 	m.currentModel = "unknown-model"
 	m.width = 80
 	m.height = 40
@@ -327,7 +327,7 @@ func TestSendChatCmdWithStreamError(t *testing.T) {
 		},
 	})
 
-	m := NewModel(store, router)
+	m := NewModel(store, router, "profiles/carlos_gonzalez.json")
 	m.width = 80
 	m.height = 40
 

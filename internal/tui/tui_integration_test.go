@@ -67,7 +67,7 @@ func TestTUIChatFlow(t *testing.T) {
 	store := session.NewStore(tempDir, 10)
 
 	// Setup: create TUI model with pre-typed input
-	m := NewModel(store, router)
+	m := NewModel(store, router, "profiles/carlos_gonzalez.json")
 	m.width = 80
 	m.height = 40
 

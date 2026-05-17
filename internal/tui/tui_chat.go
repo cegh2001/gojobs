@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"gojobs/internal/ai"
+	"gojobs/internal/jobpage"
+	"gojobs/internal/profile"
 	"gojobs/internal/provider"
 	"gojobs/internal/session"
 )
@@ -40,6 +44,8 @@ func (m Model) handleChatTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleChatSend processes the current input and sends it to the AI provider.
+// If the input is a URL (http/https), it fetches the job page, loads the profile,
+// builds a grounded prompt, and uses that as context for the AI.
 func (m Model) handleChatSend() (tea.Model, tea.Cmd) {
 	input := strings.TrimSpace(m.chatInput)
 	if input == "" || m.chatLoading {
@@ -52,7 +58,91 @@ func (m Model) handleChatSend() (tea.Model, tea.Cmd) {
 		m.chatMessages = nil
 	}
 
-	// Add user message
+	isURL := strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://")
+
+	if isURL {
+		return m.handleURLSend(input)
+	}
+
+	return m.handleTextSend(input)
+}
+
+// handleURLSend fetches a job page from a URL, builds a grounded prompt with
+// the candidate profile, and sends it to the AI for analysis.
+func (m Model) handleURLSend(url string) (tea.Model, tea.Cmd) {
+	// Show URL as user message
+	m.chatSession.AddMessage("user", url)
+	m.chatMessages = m.chatSession.Messages
+	m.chatInput = ""
+	m.chatLoading = true
+	m.chatScroll = 0
+	m.err = nil
+
+	// Fetch job page
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	fetcher := jobpage.NewFetcher(45 * time.Second)
+	page, err := fetcher.Fetch(ctx, url)
+	if err != nil {
+		errContent := fmt.Sprintf("Error fetching job page: %v", err)
+		m.chatSession.AddMessage("assistant", errContent)
+		m.chatMessages = m.chatSession.Messages
+		m.chatLoading = false
+		m.err = err
+		_ = m.sessionStore.Save(m.chatSession)
+		return m, nil
+	}
+
+	// Load profile
+	candidateProfile, profileErr := profile.Load(m.profilePath)
+	if profileErr != nil {
+		errContent := fmt.Sprintf("Error loading profile: %v", profileErr)
+		m.chatSession.AddMessage("assistant", errContent)
+		m.chatMessages = m.chatSession.Messages
+		m.chatLoading = false
+		m.err = profileErr
+		_ = m.sessionStore.Save(m.chatSession)
+		return m, nil
+	}
+
+	// Build grounded prompt (reuse existing prompt builder from internal/ai)
+	prompt := ai.BuildCompactPrompt(candidateProfile, page, "")
+
+	// Add the prompt as system context to the conversation
+	m.chatSession.AddMessage("system", prompt)
+	m.chatMessages = m.chatSession.Messages
+
+	// Persist
+	_ = m.sessionStore.Save(m.chatSession)
+
+	// Resolve provider
+	prov, err := m.providerRouter.Resolve(m.currentModel)
+	if err != nil {
+		errContent := fmt.Sprintf("Error: model %q — %v", m.currentModel, err)
+		m.chatSession.AddMessage("assistant", errContent)
+		m.chatMessages = m.chatSession.Messages
+		m.chatLoading = false
+		m.err = err
+		_ = m.sessionStore.Save(m.chatSession)
+		return m, nil
+	}
+
+	// Build provider messages from full session history.
+	// The system message (grounded prompt) is first, followed by user/AI turns.
+	var providerMsgs []provider.Message
+	for _, msg := range m.chatMessages {
+		providerMsgs = append(providerMsgs, provider.Message{
+			Role:    provider.Role(msg.Role),
+			Content: msg.Content,
+		})
+	}
+
+	return m, m.sendChatCmd(prov, providerMsgs)
+}
+
+// handleTextSend sends a regular text message to the AI (non-URL, follow-up).
+func (m Model) handleTextSend(input string) (tea.Model, tea.Cmd) {
 	m.chatSession.AddMessage("user", input)
 	m.chatMessages = m.chatSession.Messages
 	m.chatInput = ""
@@ -63,10 +153,9 @@ func (m Model) handleChatSend() (tea.Model, tea.Cmd) {
 	// Persist
 	_ = m.sessionStore.Save(m.chatSession)
 
-	// Resolve provider and build message list
+	// Resolve provider
 	prov, err := m.providerRouter.Resolve(m.currentModel)
 	if err != nil {
-		// Provider resolution failed — show error inline
 		errContent := fmt.Sprintf("Error: model %q — %v", m.currentModel, err)
 		m.chatSession.AddMessage("assistant", errContent)
 		m.chatMessages = m.chatSession.Messages

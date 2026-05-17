@@ -23,7 +23,7 @@ func setupTestModel(t *testing.T) Model {
 	store := session.NewStore(tempDir, 10)
 	router := provider.NewRouter()
 
-	return NewModel(store, router)
+	return NewModel(store, router, "profiles/carlos_gonzalez.json")
 }
 
 // updateAndDrain executes the returned command and feeds the result back as a message.
@@ -524,7 +524,7 @@ func TestSendWithMockProvider(t *testing.T) {
 		},
 	})
 
-	m := NewModel(store, router)
+	m := NewModel(store, router, "profiles/carlos_gonzalez.json")
 	m.width = 80
 	m.height = 40
 
