@@ -17,8 +17,9 @@ Go CLI that reads a job page URL, grounds Gemma 4 with a structured candidate do
 
 This bootstrap follows the current Google AI SDK and model guidance checked during implementation:
 
-- `gemma-4-31b-it` as the default heavy model
-- `gemma-4-26b-a4b-it` as the default fast model
+- `gemma-4-31b-it` as the default model for normal runs
+- `-mode fast` is kept as a compatibility alias, but it still defaults to `gemma-4-31b-it`
+- the main latency optimization comes from the compact prompt, not from switching to a smaller model
 - SDK: `google.golang.org/genai`
 
 ## Quick start
@@ -29,7 +30,7 @@ Set your API key in `.env.local`, `.env`, or the shell environment using either 
 go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001
 ```
 
-Use the faster model:
+Use the optimized default path explicitly:
 
 ```bash
 go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001 -mode fast
@@ -59,7 +60,7 @@ go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001 -json
 
 - `-url`: job page URL to analyze
 - `-profile`: candidate profile JSON path, default `profiles/carlos_gonzalez.json`
-- `-mode`: `heavy` or `fast`
+- `-mode`: `heavy` or `fast` for compatibility; both default to the same optimized `gemma-4-31b-it` path unless `-model` is provided
 - `-model`: explicit model override
 - `-note`: extra candidate context you want the model to consider
 - `-prompt-only`: print the constructed prompt and exit

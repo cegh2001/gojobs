@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -18,7 +17,6 @@ import (
 
 type Request struct {
 	Model          string
-	FallbackModel  string
 	Profile        profile.Profile
 	Page           jobpage.Page
 	ExtraNote      string
@@ -43,41 +41,16 @@ func NewService(ctx context.Context, apiKey string) (*Service, error) {
 }
 
 func (s *Service) Analyze(ctx context.Context, req Request) (IntroRecommendation, error) {
-	prompt := BuildPrompt(req.Profile, req.Page, req.ExtraNote)
-	if req.CompactPrompt {
-		prompt = BuildCompactPrompt(req.Profile, req.Page, req.ExtraNote)
+	prompt := BuildCompactPrompt(req.Profile, req.Page, req.ExtraNote)
+	if !req.CompactPrompt {
+		prompt = BuildPrompt(req.Profile, req.Page, req.ExtraNote)
 	}
 
-	firstAttemptCtx := ctx
-	firstAttemptCancel := func() {}
-	if req.FallbackModel != "" {
-		firstAttemptCtx, firstAttemptCancel = deriveFastAttemptContext(ctx, 35*time.Second)
-	}
-	defer firstAttemptCancel()
-
-	recommendation, err := s.generateRecommendation(firstAttemptCtx, req.Model, prompt, req.ProgressWriter)
-	if err == nil {
-		return recommendation, nil
-	}
-
-	var structuredErr *structuredOutputError
-	if req.FallbackModel != "" && req.FallbackModel != req.Model && ctx.Err() == nil && (errors.As(err, &structuredErr) || errors.Is(err, context.DeadlineExceeded) || isFallbackableModelError(err)) {
-		if req.ProgressWriter != nil {
-			if errors.Is(err, context.DeadlineExceeded) || isFallbackableModelError(err) {
-				_, _ = fmt.Fprintf(req.ProgressWriter, "%s hit the fast-mode time budget. Retrying with %s...\n", req.Model, req.FallbackModel)
-			} else {
-				_, _ = fmt.Fprintf(req.ProgressWriter, "%s returned invalid structured output. Retrying with %s...\n", req.Model, req.FallbackModel)
-			}
-		}
-
-		return s.generateRecommendation(ctx, req.FallbackModel, prompt, req.ProgressWriter)
-	}
-
-	return IntroRecommendation{}, err
+	return s.generateRecommendation(ctx, req.Model, prompt, req.ProgressWriter)
 }
 
 func (s *Service) generateRecommendation(ctx context.Context, model string, prompt string, progressWriter io.Writer) (IntroRecommendation, error) {
-	temperature := float32(0.2)
+	temperature := float32(0.15)
 	stopProgress := startProgressHeartbeat(ctx, progressWriter, model, len(prompt))
 	defer stopProgress()
 
@@ -89,7 +62,7 @@ func (s *Service) generateRecommendation(ctx context.Context, model string, prom
 			ResponseJsonSchema: ResponseSchema(),
 			Temperature:        &temperature,
 			CandidateCount:     1,
-			MaxOutputTokens:    900,
+			MaxOutputTokens:    700,
 		})
 		if err == nil {
 			break
@@ -115,22 +88,10 @@ func (s *Service) generateRecommendation(ctx context.Context, model string, prom
 
 	recommendation, err := decodeRecommendationPayload(strings.TrimSpace(response.Text()))
 	if err != nil {
-		return IntroRecommendation{}, &structuredOutputError{err: err}
+		return IntroRecommendation{}, fmt.Errorf("structured response from model %q was invalid: %w", model, err)
 	}
 
 	return recommendation, nil
-}
-
-type structuredOutputError struct {
-	err error
-}
-
-func (e *structuredOutputError) Error() string {
-	return e.err.Error()
-}
-
-func (e *structuredOutputError) Unwrap() error {
-	return e.err
 }
 
 func decodeRecommendationPayload(payloads ...string) (IntroRecommendation, error) {
@@ -190,38 +151,10 @@ func startProgressHeartbeat(ctx context.Context, writer io.Writer, model string,
 	}
 }
 
-func deriveFastAttemptContext(parent context.Context, maxBudget time.Duration) (context.Context, context.CancelFunc) {
-	deadline, ok := parent.Deadline()
-	if !ok {
-		return context.WithTimeout(parent, maxBudget)
-	}
-
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return parent, func() {}
-	}
-
-	budget := remaining / 3
-	if budget > maxBudget {
-		budget = maxBudget
-	}
-	if budget < 10*time.Second {
-		return parent, func() {}
-	}
-
-	return context.WithTimeout(parent, budget)
-}
-
 func isRetryableModelError(err error) bool {
 	message := err.Error()
 	return strings.Contains(message, "Error 500") ||
 		strings.Contains(message, "Status: INTERNAL") ||
 		strings.Contains(message, "Error 503") ||
 		strings.Contains(message, "Status: UNAVAILABLE")
-}
-
-func isFallbackableModelError(err error) bool {
-	message := err.Error()
-	return strings.Contains(message, "Error 504") ||
-		strings.Contains(message, "DEADLINE_EXCEEDED")
 }

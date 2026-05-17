@@ -38,7 +38,7 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 
 	jobURL := fs.String("url", "", "Job page URL to analyze")
 	profilePath := fs.String("profile", appConfig.DefaultProfile, "Path to the candidate profile JSON")
-	mode := fs.String("mode", "heavy", "Model mode: heavy or fast")
+	mode := fs.String("mode", "heavy", "Compatibility flag: heavy or fast. Both default to gemma-4-31b-it unless -model is provided")
 	modelOverride := fs.String("model", "", "Explicit model override")
 	extraNote := fs.String("note", "", "Extra candidate context to inject into the prompt")
 	promptOnly := fs.Bool("prompt-only", false, "Build and print the prompt without calling Google AI")
@@ -76,10 +76,7 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 
 	note := strings.TrimSpace(*extraNote)
 	if *promptOnly {
-		prompt := ai.BuildPrompt(candidateProfile, page, note)
-		if resolvedMode == "fast" {
-			prompt = ai.BuildCompactPrompt(candidateProfile, page, note)
-		}
+		prompt := ai.BuildCompactPrompt(candidateProfile, page, note)
 
 		_, err := io.WriteString(stdout, prompt+"\n")
 		return err
@@ -95,19 +92,14 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 	}
 
 	modelName := appConfig.ResolveModel(resolvedMode, *modelOverride)
-	fallbackModel := ""
-	if resolvedMode == "fast" {
-		fallbackModel = appConfig.HeavyModel
-	}
-	logStep(stderr, "Calling model %s...", modelName)
+	logStep(stderr, "Calling model %s with optimized prompt...", modelName)
 	response, err := service.Analyze(ctx, ai.Request{
 		Model:          modelName,
-		FallbackModel:  fallbackModel,
 		Profile:        candidateProfile,
 		Page:           page,
 		ExtraNote:      note,
 		ProgressWriter: stderr,
-		CompactPrompt:  resolvedMode == "fast",
+		CompactPrompt:  true,
 	})
 	if err != nil {
 		return err

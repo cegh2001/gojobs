@@ -60,11 +60,11 @@ func BuildCompactPrompt(candidate profile.Profile, page jobpage.Page, extraNote 
 	builder.WriteString("- Do not repeat words or phrases.\n")
 	builder.WriteString("- Use only facts present in the compact dossier, job page, or runtime note.\n")
 	builder.WriteString("- If the page is sparse, rely on the most relevant proof points instead of guessing.\n")
-	builder.WriteString("- Keep fit_summary to 2 sentences max.\n")
-	builder.WriteString("- Keep evidence_used to at most 4 short items.\n")
+	builder.WriteString("- Keep fit_summary to 1 sentence when possible, never more than 2.\n")
+	builder.WriteString("- Keep evidence_used to at most 3 short items.\n")
 	builder.WriteString("- Keep cautions to at most 2 short items.\n")
-	builder.WriteString("- Keep primary_message around 120 to 170 words.\n")
-	builder.WriteString("- Keep secondary_message around 90 to 140 words.\n")
+	builder.WriteString("- Keep primary_message around 110 to 160 words.\n")
+	builder.WriteString("- Keep secondary_message around 85 to 130 words.\n")
 	builder.WriteString("- Recommended angle must be one of: domain-business, ai-agents, product-fullstack.\n\n")
 
 	if trimmedNote := strings.TrimSpace(extraNote); trimmedNote != "" {
@@ -84,7 +84,7 @@ func BuildCompactPrompt(candidate profile.Profile, page jobpage.Page, extraNote 
 		builder.WriteString(fmt.Sprintf("Meta description: %s\n", page.MetaDescription))
 	}
 	builder.WriteString("Page text snippet:\n")
-	builder.WriteString(trimRunes(page.Content, 600))
+	builder.WriteString(trimRunes(page.Content, 400))
 	builder.WriteString("\n\n")
 	builder.WriteString("Return valid JSON matching the schema. If needed, reduce verbosity instead of omitting closing JSON brackets.\n")
 
@@ -107,10 +107,10 @@ func buildCompactDossier(candidate profile.Profile) string {
 		builder.WriteString(fmt.Sprintf("Education: %s in %s, %s, graduation %s\n", item.Degree, item.Institution, item.Location, item.Graduation))
 	}
 
-	writeLimitedBulletSection(&builder, "Strongest proof points", candidate.VerifiedHighlights, 7)
+	writeLimitedBulletSection(&builder, "Strongest proof points", candidate.VerifiedHighlights, 5)
 
 	if len(candidate.PrivateProjects) > 0 {
-		projectBullets := flattenProjectHighlights(candidate.PrivateProjects, 3)
+		projectBullets := flattenProjectHighlights(candidate.PrivateProjects, 2)
 		writeLimitedBulletSection(&builder, "Private repo evidence", projectBullets, len(projectBullets))
 	}
 
@@ -118,7 +118,7 @@ func buildCompactDossier(candidate profile.Profile) string {
 		builder.WriteString("\nAngle cues:\n")
 		for _, angle := range candidate.PreferredAngles {
 			builder.WriteString(fmt.Sprintf("- %s: %s\n", angle.Name, angle.WhenToUse))
-			for _, proofPoint := range limitStrings(angle.ProofPoints, 2) {
+			for _, proofPoint := range limitStrings(angle.ProofPoints, 1) {
 				builder.WriteString(fmt.Sprintf("  - %s\n", proofPoint))
 			}
 		}
@@ -226,7 +226,7 @@ func ResponseSchema() map[string]any {
 			},
 			"evidence_used": map[string]any{
 				"type":     "array",
-				"maxItems": 4,
+				"maxItems": 3,
 				"items": map[string]any{
 					"type": "string",
 				},

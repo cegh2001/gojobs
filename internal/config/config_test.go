@@ -79,3 +79,18 @@ func TestLoadPrefersExistingEnvironment(t *testing.T) {
 		t.Fatalf("FastModel = %q, want %q", appConfig.FastModel, "file-fast")
 	}
 }
+
+func TestResolveModelAlwaysUsesHeavyUnlessOverridden(t *testing.T) {
+	appConfig := Config{
+		FastModel:  "gemma-4-26b-a4b-it",
+		HeavyModel: "gemma-4-31b-it",
+	}
+
+	if got := appConfig.ResolveModel("fast", ""); got != "gemma-4-31b-it" {
+		t.Fatalf("ResolveModel(fast) = %q, want %q", got, "gemma-4-31b-it")
+	}
+
+	if got := appConfig.ResolveModel("heavy", "custom-model"); got != "custom-model" {
+		t.Fatalf("ResolveModel(override) = %q, want %q", got, "custom-model")
+	}
+}

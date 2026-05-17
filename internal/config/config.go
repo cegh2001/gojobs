@@ -11,7 +11,7 @@ import (
 
 const (
 	DefaultProfilePath = "profiles/carlos_gonzalez.json"
-	DefaultFastModel   = "gemma-4-26b-a4b-it"
+	DefaultFastModel   = "gemma-4-31b-it"
 	DefaultHeavyModel  = "gemma-4-31b-it"
 )
 
@@ -67,10 +67,6 @@ func (c Config) Validate() error {
 func (c Config) ResolveModel(mode string, override string) string {
 	if trimmed := strings.TrimSpace(override); trimmed != "" {
 		return trimmed
-	}
-
-	if mode == "fast" {
-		return c.FastModel
 	}
 
 	return c.HeavyModel

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -32,15 +33,6 @@ func TestDecodeRecommendationPayloadAcceptsAccumulatedChunks(t *testing.T) {
 	}
 }
 
-func TestStructuredOutputErrorImplementsUnwrap(t *testing.T) {
-	inner := errors.New("decode failed")
-	wrapped := &structuredOutputError{err: inner}
-
-	if !errors.Is(wrapped, inner) {
-		t.Fatalf("expected wrapped error to unwrap to inner error")
-	}
-}
-
 func TestIsRetryableModelError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -59,19 +51,13 @@ func TestIsRetryableModelError(t *testing.T) {
 	}
 }
 
-func TestIsFallbackableModelError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "deadline exceeded", err: errors.New("Error 504, Status: DEADLINE_EXCEEDED"), want: true},
-		{name: "json decode", err: errors.New("decode response JSON: invalid character 'o' looking for beginning of value"), want: false},
+func TestDecodeRecommendationPayloadReturnsHelpfulEmptyError(t *testing.T) {
+	_, err := decodeRecommendationPayload("")
+	if err == nil {
+		t.Fatalf("expected an error for empty payload")
 	}
 
-	for _, test := range tests {
-		if got := isFallbackableModelError(test.err); got != test.want {
-			t.Fatalf("%s: got %v want %v", test.name, got, test.want)
-		}
+	if !strings.Contains(err.Error(), "empty response") {
+		t.Fatalf("expected empty response error, got %v", err)
 	}
 }
