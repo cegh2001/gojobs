@@ -286,3 +286,57 @@ func (m Model) handleChatNew() (tea.Model, tea.Cmd) {
 func normalizePastedInput(text string) string {
 	return strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(text)
 }
+
+// buildChatPrompt creates a chat-friendly context prompt from the candidate profile
+// and job page. Unlike BuildCompactPrompt (which enforces JSON schema for one-shot
+// CLI use), this version asks for a conversational introduction message with no
+// structured output requirements.
+func buildChatPrompt(candidate profile.Profile, page jobpage.Page, extraNote string) string {
+	var builder strings.Builder
+
+	builder.WriteString("You are writing outreach introductions for Carlos Eduardo Gonzalez Henriquez.\n")
+	builder.WriteString("Use the compact dossier below and the job page to write a tailored, conversational introduction message.\n\n")
+	builder.WriteString("Rules:\n")
+	builder.WriteString("- Use only facts present in the dossier, job page, or runtime note.\n")
+	builder.WriteString("- Write in a natural, conversational tone — this is a chat, not a formal document.\n")
+	builder.WriteString("- Keep the message around 110 to 160 words.\n")
+	builder.WriteString("- Write in English unless the job page is predominantly in Spanish.\n")
+	builder.WriteString("- If the page is sparse, rely on the most relevant proof points instead of guessing.\n")
+	builder.WriteString("- Do not invent details about relocation, visa, salary, or employer names.\n\n")
+
+	if trimmedNote := strings.TrimSpace(extraNote); trimmedNote != "" {
+		builder.WriteString("Runtime note:\n")
+		builder.WriteString(trimmedNote)
+		builder.WriteString("\n\n")
+	}
+
+	builder.WriteString("Candidate dossier:\n")
+	builder.WriteString(candidate.Dossier())
+	builder.WriteString("\n\n")
+
+	builder.WriteString("Job page:\n")
+	builder.WriteString(fmt.Sprintf("URL: %s\n", page.URL))
+	builder.WriteString(fmt.Sprintf("Title: %s\n", page.Title))
+	if page.MetaDescription != "" {
+		builder.WriteString(fmt.Sprintf("Meta description: %s\n", page.MetaDescription))
+	}
+	builder.WriteString("Page content:\n")
+	builder.WriteString(trimRunes(page.Content, 600))
+	builder.WriteString("\n\n")
+
+	builder.WriteString("Write a tailored introduction message for this specific job. Be specific, factual, and persuasive. Mention concrete skills and projects that match the role.")
+
+	return builder.String()
+}
+
+// trimRunes truncates a string to at most `limit` runes, appending "..." if truncated.
+func trimRunes(raw string, limit int) string {
+	if utf8.RuneCountInString(raw) <= limit {
+		return raw
+	}
+	runes := []rune(raw)
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	return string(runes[:limit-3]) + "..."
+}

@@ -36,6 +36,7 @@ func (g *GoogleProvider) SupportedModels() []string {
 }
 
 // SendMessageStream sends messages using a chat session with streaming.
+// System messages (RoleSystem) are extracted and used as SystemInstruction.
 // History messages (all except the last) are used to create the chat.
 // The last message is sent as the current user input.
 func (g *GoogleProvider) SendMessageStream(ctx context.Context, model string, messages []Message) (<-chan StreamToken, error) {
@@ -43,18 +44,44 @@ func (g *GoogleProvider) SendMessageStream(ctx context.Context, model string, me
 		return nil, fmt.Errorf("no messages provided")
 	}
 
-	// Build history from all messages except the last one
-	var history []*genai.Content
-	for i := 0; i < len(messages)-1; i++ {
-		history = append(history, toGenaiContent(messages[i]))
+	// Extract system message(s) for SystemInstruction
+	var systemParts []*genai.Part
+	var chatMessages []Message
+	for _, msg := range messages {
+		if msg.Role == RoleSystem {
+			systemParts = append(systemParts, &genai.Part{Text: msg.Content})
+		} else {
+			chatMessages = append(chatMessages, msg)
+		}
 	}
 
-	chat, err := g.client.Chats.Create(ctx, model, nil, history)
+	if len(chatMessages) == 0 {
+		return nil, fmt.Errorf("no non-system messages provided")
+	}
+
+	// Build history from all chat messages except the last one
+	var history []*genai.Content
+	for i := 0; i < len(chatMessages)-1; i++ {
+		history = append(history, toGenaiContent(chatMessages[i]))
+	}
+
+	// Build config with system instruction if present
+	var config *genai.GenerateContentConfig
+	if len(systemParts) > 0 {
+		config = &genai.GenerateContentConfig{
+			SystemInstruction: &genai.Content{
+				Role:  string(genai.RoleUser),
+				Parts: systemParts,
+			},
+		}
+	}
+
+	chat, err := g.client.Chats.Create(ctx, model, config, history)
 	if err != nil {
 		return nil, fmt.Errorf("create chat session: %w", err)
 	}
 
-	lastMsg := messages[len(messages)-1]
+	lastMsg := chatMessages[len(chatMessages)-1]
 
 	ch := make(chan StreamToken, 32)
 	go func() {
