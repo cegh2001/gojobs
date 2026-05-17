@@ -32,30 +32,29 @@ func run() int {
 
 func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []string) error {
 	appConfig := config.Load()
+	normalizedArgs, ignoredMode := stripDeprecatedModeFlag(args)
 
 	fs := flag.NewFlagSet("gojobs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	jobURL := fs.String("url", "", "Job page URL to analyze")
 	profilePath := fs.String("profile", appConfig.DefaultProfile, "Path to the candidate profile JSON")
-	mode := fs.String("mode", "heavy", "Compatibility flag: heavy or fast. Both default to gemma-4-31b-it unless -model is provided")
 	modelOverride := fs.String("model", "", "Explicit model override")
 	extraNote := fs.String("note", "", "Extra candidate context to inject into the prompt")
 	promptOnly := fs.Bool("prompt-only", false, "Build and print the prompt without calling Google AI")
 	jsonOutput := fs.Bool("json", false, "Print raw JSON instead of the human-readable report")
 	timeout := fs.Duration("timeout", 4*time.Minute, "Timeout for fetching and model execution")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(normalizedArgs); err != nil {
 		return err
+	}
+
+	if ignoredMode {
+		logStep(stderr, "Ignoring deprecated -mode flag. gojobs now always uses the optimized single-model path unless -model is provided.")
 	}
 
 	if strings.TrimSpace(*jobURL) == "" {
 		return errors.New("-url is required")
-	}
-
-	resolvedMode, err := config.NormalizeMode(*mode)
-	if err != nil {
-		return err
 	}
 
 	ctx, cancel := context.WithTimeout(parent, *timeout)
@@ -91,7 +90,7 @@ func runMain(parent context.Context, stdout io.Writer, stderr io.Writer, args []
 		return err
 	}
 
-	modelName := appConfig.ResolveModel(resolvedMode, *modelOverride)
+	modelName := appConfig.ResolveModel(*modelOverride)
 	logStep(stderr, "Calling model %s with optimized prompt...", modelName)
 	response, err := service.Analyze(ctx, ai.Request{
 		Model:          modelName,
@@ -146,4 +145,27 @@ func renderResponse(w io.Writer, response ai.IntroRecommendation) {
 			fmt.Fprintf(w, "- %s\n", item)
 		}
 	}
+}
+
+func stripDeprecatedModeFlag(args []string) ([]string, bool) {
+	normalized := make([]string, 0, len(args))
+	ignored := false
+
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+
+		switch {
+		case arg == "-mode" || arg == "--mode":
+			ignored = true
+			if index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
+				index++
+			}
+		case strings.HasPrefix(arg, "-mode=") || strings.HasPrefix(arg, "--mode="):
+			ignored = true
+		default:
+			normalized = append(normalized, arg)
+		}
+	}
+
+	return normalized, ignored
 }

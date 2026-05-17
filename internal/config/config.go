@@ -11,14 +11,12 @@ import (
 
 const (
 	DefaultProfilePath = "profiles/carlos_gonzalez.json"
-	DefaultFastModel   = "gemma-4-31b-it"
-	DefaultHeavyModel  = "gemma-4-31b-it"
+	DefaultModel       = "gemma-4-31b-it"
 )
 
 type Config struct {
 	APIKey         string
-	FastModel      string
-	HeavyModel     string
+	Model          string
 	DefaultProfile string
 	HTTPTimeout    time.Duration
 }
@@ -37,20 +35,20 @@ func Load() Config {
 		_ = os.Unsetenv("GOOGLE_API_KEY")
 	}
 
-	fastModel := strings.TrimSpace(os.Getenv("GOJOBS_FAST_MODEL"))
-	if fastModel == "" {
-		fastModel = DefaultFastModel
+	model := strings.TrimSpace(os.Getenv("GOJOBS_MODEL"))
+	if model == "" {
+		model = strings.TrimSpace(os.Getenv("GOJOBS_HEAVY_MODEL"))
 	}
-
-	heavyModel := strings.TrimSpace(os.Getenv("GOJOBS_HEAVY_MODEL"))
-	if heavyModel == "" {
-		heavyModel = DefaultHeavyModel
+	if model == "" {
+		model = strings.TrimSpace(os.Getenv("GOJOBS_FAST_MODEL"))
+	}
+	if model == "" {
+		model = DefaultModel
 	}
 
 	return Config{
 		APIKey:         apiKey,
-		FastModel:      fastModel,
-		HeavyModel:     heavyModel,
+		Model:          model,
 		DefaultProfile: DefaultProfilePath,
 		HTTPTimeout:    45 * time.Second,
 	}
@@ -64,23 +62,12 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) ResolveModel(mode string, override string) string {
+func (c Config) ResolveModel(override string) string {
 	if trimmed := strings.TrimSpace(override); trimmed != "" {
 		return trimmed
 	}
 
-	return c.HeavyModel
-}
-
-func NormalizeMode(mode string) (string, error) {
-	switch strings.TrimSpace(strings.ToLower(mode)) {
-	case "", "heavy":
-		return "heavy", nil
-	case "fast":
-		return "fast", nil
-	default:
-		return "", fmt.Errorf("invalid -mode %q: use heavy or fast", mode)
-	}
+	return c.Model
 }
 
 func loadEnvFiles(paths ...string) {

@@ -18,7 +18,7 @@ Go CLI that reads a job page URL, grounds Gemma 4 with a structured candidate do
 This bootstrap follows the current Google AI SDK and model guidance checked during implementation:
 
 - `gemma-4-31b-it` as the default model for normal runs
-- `-mode fast` is kept as a compatibility alias, but it still defaults to `gemma-4-31b-it`
+- `GOJOBS_MODEL` is the single default model setting for the CLI
 - the main latency optimization comes from the compact prompt, not from switching to a smaller model
 - SDK: `google.golang.org/genai`
 
@@ -30,10 +30,10 @@ Set your API key in `.env.local`, `.env`, or the shell environment using either 
 go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001
 ```
 
-Use the optimized default path explicitly:
+Override the model explicitly only when you want to test a different one:
 
 ```bash
-go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001 -mode fast
+go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001 -model gemma-4-31b-it
 ```
 
 Inject extra context that is true for a specific application:
@@ -60,18 +60,20 @@ go run ./cmd/gojobs -url https://www.workatastartup.com/jobs/89001 -json
 
 - `-url`: job page URL to analyze
 - `-profile`: candidate profile JSON path, default `profiles/carlos_gonzalez.json`
-- `-mode`: `heavy` or `fast` for compatibility; both default to the same optimized `gemma-4-31b-it` path unless `-model` is provided
 - `-model`: explicit model override
 - `-note`: extra candidate context you want the model to consider
 - `-prompt-only`: print the constructed prompt and exit
 - `-json`: print raw structured JSON
 - `-timeout`: total timeout for page fetch and model call
 
+Legacy note: old invocations that still pass `-mode fast` or `-mode heavy` are ignored so older shell history does not break, but the flag is no longer part of the public interface.
+
 ## Current limits
 
 - The profile is curated from verified sources already present in this repo plus public GitHub signals. It is not yet auto-refreshed from PDFs or the GitHub API at runtime.
 - Public GitHub did not expose detailed public repository contributions for Gonavi or LegalContigo, so company-specific claims rely on the CV material unless you pass extra runtime notes.
-- If a page is heavily JS-rendered and the server response is too thin, the fetcher may need a browser-backed fallback in a later iteration.
+- The fetcher now retries through a readable fallback when a job page is JS-heavy or the direct HTML is too thin, which improves Work at a Startup extraction without needing a browser.
+- Some client-rendered sites may still benefit from a browser-backed fallback in a later iteration.
 
 ## Validation
 
