@@ -152,7 +152,7 @@ func (m Model) renderChatStatusLine() string {
 		return errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
-	return infoStyle.Render("Enter: enviar | ↑/↓: scroll | PgUp/PgDn: salto | Ctrl+K: modelo")
+	return infoStyle.Render("Enter: enviar | ↑/↓: scroll | PgUp/PgDn: salto")
 }
 
 // viewSessions renders the session list overlay.

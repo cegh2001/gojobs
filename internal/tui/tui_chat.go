@@ -103,7 +103,7 @@ func extractURL(input string) (url string, note string) {
 // the candidate profile, and sends it to the AI for analysis.
 // extraText is any additional user text surrounding the URL (used as a runtime note).
 func (m Model) handleURLSend(url string, extraText string) (tea.Model, tea.Cmd) {
-	// Show the full user input as a message
+	// Show the full user input in the chat
 	displayText := url
 	if extraText != "" {
 		displayText = extraText + " " + url
@@ -143,12 +143,15 @@ func (m Model) handleURLSend(url string, extraText string) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// Build grounded prompt, passing extraText as the runtime note
-	prompt := buildChatPrompt(candidateProfile, page, extraText)
+	// Build context
+	contextPrompt := buildChatPrompt(candidateProfile, page, extraText)
 
-	// Add the prompt as system context to the conversation
-	m.chatSession.AddMessage("system", prompt)
-	m.chatMessages = m.chatSession.Messages
+	// Build a rich message: prepend context to the AI-facing user message.
+	// This avoids SystemInstruction API issues with Gemma 4 Chat.
+	enrichedMsg := fmt.Sprintf(
+		"%s\n\nBased on the context above, write a tailored introduction message for this job posting.",
+		contextPrompt,
+	)
 
 	// Persist
 	_ = m.sessionStore.Save(m.chatSession)
@@ -165,13 +168,10 @@ func (m Model) handleURLSend(url string, extraText string) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// Build provider messages from full session history.
-	var providerMsgs []provider.Message
-	for _, msg := range m.chatMessages {
-		providerMsgs = append(providerMsgs, provider.Message{
-			Role:    provider.Role(msg.Role),
-			Content: msg.Content,
-		})
+	// Build provider messages: use enriched message instead of the raw URL.
+	// The enriched message includes full context for the AI.
+	providerMsgs := []provider.Message{
+		{Role: provider.RoleUser, Content: enrichedMsg},
 	}
 
 	return m, m.sendChatCmd(prov, providerMsgs)

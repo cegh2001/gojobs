@@ -45,11 +45,11 @@ func (g *GoogleProvider) SendMessageStream(ctx context.Context, model string, me
 	}
 
 	// Extract system message(s) for SystemInstruction
-	var systemParts []*genai.Part
+	var systemText string
 	var chatMessages []Message
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
-			systemParts = append(systemParts, &genai.Part{Text: msg.Content})
+			systemText += msg.Content + "\n\n"
 		} else {
 			chatMessages = append(chatMessages, msg)
 		}
@@ -65,13 +65,12 @@ func (g *GoogleProvider) SendMessageStream(ctx context.Context, model string, me
 		history = append(history, toGenaiContent(chatMessages[i]))
 	}
 
-	// Build config with system instruction if present
+	// Build config with system instruction if present (use plain text, no role)
 	var config *genai.GenerateContentConfig
-	if len(systemParts) > 0 {
+	if systemText != "" {
 		config = &genai.GenerateContentConfig{
 			SystemInstruction: &genai.Content{
-				Role:  string(genai.RoleUser),
-				Parts: systemParts,
+				Parts: []*genai.Part{{Text: systemText}},
 			},
 		}
 	}
