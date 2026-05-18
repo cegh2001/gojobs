@@ -288,21 +288,29 @@ func normalizePastedInput(text string) string {
 }
 
 // buildChatPrompt creates a chat-friendly context prompt from the candidate profile
-// and job page. Unlike BuildCompactPrompt (which enforces JSON schema for one-shot
-// CLI use), this version asks for a conversational introduction message with no
-// structured output requirements.
+// and job page. Produces the same high-quality analysis as the CLI but conversationally.
 func buildChatPrompt(candidate profile.Profile, page jobpage.Page, extraNote string) string {
 	var builder strings.Builder
 
 	builder.WriteString("You are writing outreach introductions for Carlos Eduardo Gonzalez Henriquez.\n")
-	builder.WriteString("Use the compact dossier below and the job page to write a tailored, conversational introduction message.\n\n")
+	builder.WriteString("Your job is to read the job page and the candidate dossier, then produce a recommendation that is specific, factual, and commercially aware.\n\n")
 	builder.WriteString("Rules:\n")
-	builder.WriteString("- Use only facts present in the dossier, job page, or runtime note.\n")
-	builder.WriteString("- Write in a natural, conversational tone — this is a chat, not a formal document.\n")
-	builder.WriteString("- Keep the message around 110 to 160 words.\n")
+	builder.WriteString("- Use only facts that appear in the dossier, the job page, or the runtime note.\n")
+	builder.WriteString("- Do not invent leadership titles, funding, relocation plans, visa status, or employer names.\n")
+	builder.WriteString("- If the page contains founder names, you may use them in the greeting.\n")
+	builder.WriteString("- Prefer proof points over generic enthusiasm.\n")
 	builder.WriteString("- Write in English unless the job page is predominantly in Spanish.\n")
-	builder.WriteString("- If the page is sparse, rely on the most relevant proof points instead of guessing.\n")
-	builder.WriteString("- Do not invent details about relocation, visa, salary, or employer names.\n\n")
+	builder.WriteString("- Include a brief assessment of why this is a good fit (1-2 sentences).\n")
+	builder.WriteString("- Provide at least 2 alternative introduction messages with different angles:\n")
+	builder.WriteString("  - domain-business: emphasizes industry knowledge and business impact\n")
+	builder.WriteString("  - ai-agents: emphasizes LLM/RAG/MCP/agent architecture\n")
+	builder.WriteString("  - product-fullstack: emphasizes React/Next.js/full-stack delivery\n")
+	builder.WriteString("- Each message should be around 110 to 160 words.\n")
+	builder.WriteString("- Mention concrete projects (G-Aereo, RAG systems, MCP servers) when relevant.\n")
+	builder.WriteString("- Include a fit score (0-100) and 1-2 sentence summary.\n")
+	builder.WriteString("- List 2-3 specific evidence items that support the recommendation.\n")
+	builder.WriteString("- Include 1-2 cautions about things to avoid mentioning.\n")
+	builder.WriteString("- End with a helpful suggestion for the candidate (e.g., prepare CV, portfolio link).\n\n")
 
 	if trimmedNote := strings.TrimSpace(extraNote); trimmedNote != "" {
 		builder.WriteString("Runtime note:\n")
@@ -321,10 +329,10 @@ func buildChatPrompt(candidate profile.Profile, page jobpage.Page, extraNote str
 		builder.WriteString(fmt.Sprintf("Meta description: %s\n", page.MetaDescription))
 	}
 	builder.WriteString("Page content:\n")
-	builder.WriteString(trimRunes(page.Content, 600))
+	builder.WriteString(trimRunes(page.Content, 800))
 	builder.WriteString("\n\n")
 
-	builder.WriteString("Write a tailored introduction message for this specific job. Be specific, factual, and persuasive. Mention concrete skills and projects that match the role.")
+	builder.WriteString("Write a comprehensive analysis. Include fit assessment, at least 2 message options with different angles, evidence, cautions, and a helpful suggestion.")
 
 	return builder.String()
 }
