@@ -249,7 +249,7 @@ func readStreamTokenCmd(ch <-chan provider.StreamToken) tea.Cmd {
 			return chatStreamEndMsg{}
 		}
 		if token.Err != nil {
-			return chatStreamErrorMsg{err: fmt.Errorf("stream error: %w", token.Err)}
+			return chatStreamErrorMsg{err: token.Err}
 		}
 		return chatStreamTokenMsg{token: token.Token}
 	}
