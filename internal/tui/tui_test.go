@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,8 +32,8 @@ func updateAndDrain(m Model, msg tea.Msg, t *testing.T) Model {
 	t.Helper()
 	newModel, cmd := m.Update(msg)
 	m = newModel.(Model)
-	// Execute up to 5 commands (batching, load sessions, spinner tick, etc.)
-	for i := 0; i < 5 && cmd != nil; i++ {
+	// Execute up to 20 commands (batching, load sessions, spinner tick, stream tokens, etc.)
+	for i := 0; i < 20 && cmd != nil; i++ {
 		nextMsg := cmd()
 		if nextMsg == nil {
 			break
@@ -482,6 +483,92 @@ func TestChatResponseMsgHandlesError(t *testing.T) {
 	}
 	if len(m.chatSession.Messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(m.chatSession.Messages))
+	}
+}
+
+func TestChatStreamTokenMsgAppendsToken(t *testing.T) {
+	m := setupTestModel(t)
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatLoading = true
+
+	// First token should create a new assistant message
+	m = updateAndDrain(m, chatStreamTokenMsg{token: "Hello "}, t)
+	msgs := m.chatSession.Messages
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if string(msgs[0].Role) != "assistant" {
+		t.Errorf("message role = %q, want assistant", msgs[0].Role)
+	}
+	if msgs[0].Content != "Hello " {
+		t.Errorf("message content = %q, want %q", msgs[0].Content, "Hello ")
+	}
+
+	// Second token should append to existing message
+	m = updateAndDrain(m, chatStreamTokenMsg{token: "World"}, t)
+	msgs = m.chatSession.Messages
+	if len(msgs) != 1 {
+		t.Fatalf("expected still 1 message, got %d", len(msgs))
+	}
+	if msgs[0].Content != "Hello World" {
+		t.Errorf("message content = %q, want %q", msgs[0].Content, "Hello World")
+	}
+
+	// chatLoading should still be true during streaming
+	if !m.chatLoading {
+		t.Error("chatLoading should still be true during streaming")
+	}
+}
+
+func TestChatStreamEndMsgFinalizes(t *testing.T) {
+	m := setupTestModel(t)
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatLoading = true
+	m.chatSession.AddMessage("assistant", "Streaming content")
+
+	m = updateAndDrain(m, chatStreamEndMsg{}, t)
+
+	if m.chatLoading {
+		t.Error("chatLoading should be false after chatStreamEndMsg")
+	}
+	if m.chatScroll != 0 {
+		t.Error("chatScroll should be 0 after stream ends")
+	}
+}
+
+func TestChatStreamEndMsgEmptyResponse(t *testing.T) {
+	m := setupTestModel(t)
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatLoading = true
+	// Add empty assistant message (no tokens arrived)
+	m.chatSession.AddMessage("assistant", "")
+	m.chatMessages = m.chatSession.Messages
+
+	m = updateAndDrain(m, chatStreamEndMsg{}, t)
+
+	msgs := m.chatSession.Messages
+	if msgs[len(msgs)-1].Content != "(no response)" {
+		t.Errorf("empty response should get placeholder, got %q", msgs[len(msgs)-1].Content)
+	}
+}
+
+func TestChatStreamErrorMsgHandlesError(t *testing.T) {
+	m := setupTestModel(t)
+	m.chatSession = session.NewSession("gemma-4-31b-it")
+	m.chatLoading = true
+
+	wantErr := fmt.Errorf("stream broke")
+	m = updateAndDrain(m, chatStreamErrorMsg{err: wantErr}, t)
+
+	if m.chatLoading {
+		t.Error("chatLoading should be false after stream error")
+	}
+	if m.err == nil {
+		t.Error("err should be set after stream error")
+	}
+	msgs := m.chatSession.Messages
+	if len(msgs) < 1 {
+		t.Fatal("expected error message in chat")
 	}
 }
 

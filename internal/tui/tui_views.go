@@ -120,7 +120,7 @@ func (m Model) renderChatInputLine() string {
 	prefixText := "Tú: "
 	prefix := userStyle.Render(prefixText)
 	if m.chatLoading {
-		return prefix + infoStyle.Render("enviando...")
+		return prefix + m.spinner.View()
 	}
 
 	if m.chatInput == "" {

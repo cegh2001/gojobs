@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -37,6 +39,7 @@ type Model struct {
 	chatInput    string
 	chatLoading  bool
 	chatScroll   int // 0 = bottom, positive = scroll up
+	chatStreamCh <-chan provider.StreamToken // active stream channel, nil when not streaming
 	currentModel       string
 	profilePath        string // path to candidate profile JSON
 	statusNotification string // temporary message for state status (like copied to clipboard)
@@ -110,6 +113,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)
+
+	case chatStreamStartedMsg:
+		m.chatStreamCh = msg.ch
+		return m, readStreamTokenCmd(m.chatStreamCh)
+
+	case chatStreamTokenMsg:
+		// Append token to the last assistant message
+		msgs := m.chatSession.Messages
+		if len(msgs) == 0 || msgs[len(msgs)-1].Role != session.RoleAssistant {
+			m.chatSession.AddMessage("assistant", msg.token)
+		} else {
+			msgs[len(msgs)-1].Content += msg.token
+		}
+		m.chatMessages = m.chatSession.Messages
+		m.chatScroll = 0 // stay at bottom during streaming
+		if m.chatStreamCh != nil {
+			return m, readStreamTokenCmd(m.chatStreamCh)
+		}
+		return m, nil
+
+	case chatStreamEndMsg:
+		// Handle empty response
+		msgs := m.chatSession.Messages
+		if len(msgs) > 0 && msgs[len(msgs)-1].Role == session.RoleAssistant && msgs[len(msgs)-1].Content == "" {
+			msgs[len(msgs)-1].Content = "(no response)"
+		}
+		m.chatMessages = m.chatSession.Messages
+		m.chatLoading = false
+		m.chatStreamCh = nil
+		m.chatScroll = 0
+		m.err = nil
+		_ = m.sessionStore.Save(m.chatSession)
+		return m, nil
+
+	case chatStreamErrorMsg:
+		m.chatSession.AddMessage("assistant", fmt.Sprintf("Error: %v", msg.err))
+		m.chatMessages = m.chatSession.Messages
+		m.chatLoading = false
+		m.chatStreamCh = nil
+		m.err = msg.err
+		m.chatScroll = 0
+		_ = m.sessionStore.Save(m.chatSession)
+		return m, nil
 
 	case spinner.TickMsg:
 		if m.chatLoading {

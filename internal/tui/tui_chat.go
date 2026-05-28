@@ -188,7 +188,7 @@ func (m Model) handleURLFetchResult(msg urlFetchResultMsg) (tea.Model, tea.Cmd) 
 		{Role: provider.RoleUser, Content: enrichedMsg},
 	}
 
-	return m, m.sendChatCmd(prov, providerMsgs)
+	return m, m.sendChatStreamCmd(prov, providerMsgs)
 }
 
 // handleTextSend sends a regular text message to the AI (non-URL, follow-up).
@@ -224,28 +224,34 @@ func (m Model) handleTextSend(input string) (tea.Model, tea.Cmd) {
 		})
 	}
 
-	return m, m.sendChatCmd(prov, providerMsgs)
+	return m, m.sendChatStreamCmd(prov, providerMsgs)
 }
 
-// sendChatCmd creates a goroutine that reads stream tokens, accumulates them,
-// and sends a single chatResponseMsg when streaming completes.
-func (m Model) sendChatCmd(prov provider.Provider, messages []provider.Message) tea.Cmd {
+// sendChatStreamCmd initiates a streaming message send and returns a command
+// that starts the stream. Non-blocking — the actual tokens arrive as separate messages.
+func (m Model) sendChatStreamCmd(prov provider.Provider, messages []provider.Message) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		ch, err := prov.SendMessageStream(ctx, m.currentModel, messages)
 		if err != nil {
 			return chatResponseMsg{err: fmt.Errorf("send message: %w", err)}
 		}
+		return chatStreamStartedMsg{ch: ch}
+	}
+}
 
-		var content string
-		for token := range ch {
-			if token.Err != nil {
-				return chatResponseMsg{err: fmt.Errorf("stream error: %w", token.Err)}
-			}
-			content += token.Token
+// readStreamTokenCmd reads the next token from the streaming channel.
+// Returns chatStreamEndMsg when the channel closes.
+func readStreamTokenCmd(ch <-chan provider.StreamToken) tea.Cmd {
+	return func() tea.Msg {
+		token, ok := <-ch
+		if !ok {
+			return chatStreamEndMsg{}
 		}
-
-		return chatResponseMsg{content: content}
+		if token.Err != nil {
+			return chatStreamErrorMsg{err: fmt.Errorf("stream error: %w", token.Err)}
+		}
+		return chatStreamTokenMsg{token: token.Token}
 	}
 }
 
