@@ -1,6 +1,12 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"fmt"
+	"gojobs/internal/session"
+
+	"github.com/atotto/clipboard"
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 // handleKeyMsg dispatches key messages in chat state (non-text keys).
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -36,6 +42,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleChatNew()
 	case "ctrl+k":
 		return m.toggleModel()
+	case "ctrl+y":
+		return m.copyLastResponse()
 	case "pgup", "pageup":
 		m = m.shiftChatScroll(m.chatPageScrollStep())
 		return m, nil
@@ -195,5 +203,29 @@ func (m Model) toggleModel() (tea.Model, tea.Cmd) {
 	if m.chatSession != nil {
 		m.chatSession.Model = m.currentModel
 	}
+	return m, nil
+}
+
+// copyLastResponse copies the content of the last assistant message to the clipboard.
+func (m Model) copyLastResponse() (tea.Model, tea.Cmd) {
+	var lastMsg *session.Message
+	for i := len(m.chatMessages) - 1; i >= 0; i-- {
+		if m.chatMessages[i].Role == session.RoleAssistant {
+			lastMsg = &m.chatMessages[i]
+			break
+		}
+	}
+
+	if lastMsg == nil {
+		m.statusNotification = "No hay respuestas de la IA para copiar."
+		return m, nil
+	}
+
+	if err := clipboard.WriteAll(lastMsg.Content); err != nil {
+		m.statusNotification = fmt.Sprintf("Error al copiar al portapapeles: %v", err)
+	} else {
+		m.statusNotification = "¡Respuesta de la IA copiada al portapapeles!"
+	}
+
 	return m, nil
 }

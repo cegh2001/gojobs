@@ -330,6 +330,29 @@ func TestCtrlKToggleModel(t *testing.T) {
 	}
 }
 
+func TestCtrlYClipboard(t *testing.T) {
+	m := setupTestModel(t)
+
+	// Pressing Ctrl+Y with empty messages
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyCtrlY}, t)
+	if m.statusNotification != "No hay respuestas de la IA para copiar." {
+		t.Errorf("empty chat notification = %q, want %q", m.statusNotification, "No hay respuestas de la IA para copiar.")
+	}
+
+	// Add assistant message
+	m.chatSession = session.NewSession(m.currentModel)
+	m.chatSession.AddMessage("assistant", "Este es el cover letter perfecto")
+	m.chatMessages = m.chatSession.Messages
+
+	// Pressing Ctrl+Y with assistant message
+	m = updateAndDrain(m, tea.KeyMsg{Type: tea.KeyCtrlY}, t)
+	// On systems without a clipboard manager (or some headless test setups), WriteAll might error out.
+	// But it should either succeed or fail with clipboard error (not return 'No hay respuestas...').
+	if m.statusNotification == "No hay respuestas de la IA para copiar." {
+		t.Errorf("expected clipboard copy attempt, but got empty chat notification")
+	}
+}
+
 // =============================================================================
 // Sessions Tests
 // =============================================================================

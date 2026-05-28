@@ -37,8 +37,9 @@ type Model struct {
 	chatInput    string
 	chatLoading  bool
 	chatScroll   int // 0 = bottom, positive = scroll up
-	currentModel string
-	profilePath  string // path to candidate profile JSON
+	currentModel       string
+	profilePath        string // path to candidate profile JSON
+	statusNotification string // temporary message for state status (like copied to clipboard)
 
 	// Sessions state
 	sessions []session.Session
@@ -75,6 +76,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		// Clear status notification on any key press
+		m.statusNotification = ""
+
 		// Paste handling in chat state
 		if m.state == stateChat && msg.Paste {
 			return m.handleChatTextInput(msg)
@@ -100,6 +104,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case chatResponseMsg:
 		return m.handleChatResponse(msg)
+
+	case urlFetchResultMsg:
+		return m.handleURLFetchResult(msg)
 
 	case sessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)

@@ -99,9 +99,8 @@ func extractURL(input string) (url string, note string) {
 	return "", ""
 }
 
-// handleURLSend fetches a job page from a URL, builds a grounded prompt with
-// the candidate profile, and sends it to the AI for analysis.
-// extraText is any additional user text surrounding the URL (used as a runtime note).
+// handleURLSend initializes the async fetch of a job page and candidate profile loading.
+// It returns immediately to let the Bubbletea TUI draw the spinner without blocking the main loop.
 func (m Model) handleURLSend(url string, extraText string) (tea.Model, tea.Cmd) {
 	// Show the full user input in the chat
 	displayText := url
@@ -115,36 +114,51 @@ func (m Model) handleURLSend(url string, extraText string) (tea.Model, tea.Cmd) 
 	m.chatScroll = 0
 	m.err = nil
 
-	// Fetch job page
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
+	// Save session history
+	_ = m.sessionStore.Save(m.chatSession)
 
-	fetcher := jobpage.NewFetcher(45 * time.Second)
-	page, err := fetcher.Fetch(ctx, url)
-	if err != nil {
-		errContent := fmt.Sprintf("Error fetching job page: %v", err)
-		m.chatSession.AddMessage("assistant", errContent)
-		m.chatMessages = m.chatSession.Messages
-		m.chatLoading = false
-		m.err = err
-		_ = m.sessionStore.Save(m.chatSession)
-		return m, nil
+	return m, m.fetchAndLoadCmd(url, extraText)
+}
+
+// fetchAndLoadCmd returns a tea.Cmd that performs the heavy fetching and profile loading concurrently.
+func (m Model) fetchAndLoadCmd(url string, extraText string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		fetcher := jobpage.NewFetcher(45 * time.Second)
+		page, err := fetcher.Fetch(ctx, url)
+		if err != nil {
+			return urlFetchResultMsg{err: err}
+		}
+
+		candidateProfile, err := profile.Load(m.profilePath)
+		if err != nil {
+			return urlFetchResultMsg{err: err}
+		}
+
+		return urlFetchResultMsg{
+			page:             page,
+			candidateProfile: candidateProfile,
+			extraText:        extraText,
+		}
 	}
+}
 
-	// Load profile
-	candidateProfile, profileErr := profile.Load(m.profilePath)
-	if profileErr != nil {
-		errContent := fmt.Sprintf("Error loading profile: %v", profileErr)
+// handleURLFetchResult processes the result of the async URL fetching and profile loading.
+func (m Model) handleURLFetchResult(msg urlFetchResultMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		errContent := fmt.Sprintf("Error: %v", msg.err)
 		m.chatSession.AddMessage("assistant", errContent)
 		m.chatMessages = m.chatSession.Messages
 		m.chatLoading = false
-		m.err = profileErr
+		m.err = msg.err
 		_ = m.sessionStore.Save(m.chatSession)
 		return m, nil
 	}
 
 	// Build context
-	contextPrompt := buildChatPrompt(candidateProfile, page, extraText)
+	contextPrompt := buildChatPrompt(msg.candidateProfile, msg.page, msg.extraText)
 
 	// Build a rich message: prepend context to the AI-facing user message.
 	// This avoids SystemInstruction API issues with Gemma 4 Chat.

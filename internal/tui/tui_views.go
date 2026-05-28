@@ -75,10 +75,14 @@ func (m Model) renderChatMessages(maxLines int) string {
 // buildChatTranscriptLines converts chat messages into wrapped, styled lines.
 func (m Model) buildChatTranscriptLines() []string {
 	if len(m.chatMessages) == 0 {
-		return []string{senseiStyle.Render("🤖 AI: ") + "¡Hola! Soy tu asistente de búsqueda laboral. Pegá una URL de oferta o preguntame lo que necesites."}
+		return []string{
+			senseiStyle.Bold(true).Render("🤖 AI"),
+			"¡Hola! Soy tu asistente de búsqueda laboral. Pegá una URL de oferta o preguntame lo que necesites.",
+			"",
+		}
 	}
 
-	lines := make([]string, 0, len(m.chatMessages)*2)
+	lines := make([]string, 0, len(m.chatMessages)*3)
 	for _, msg := range m.chatMessages {
 		lines = append(lines, renderWrappedMessage(msg.Role, msg.Content, m.width)...)
 	}
@@ -88,30 +92,25 @@ func (m Model) buildChatTranscriptLines() []string {
 
 // renderWrappedMessage wraps and styles a single message with appropriate prefix.
 func renderWrappedMessage(role session.Role, content string, width int) []string {
-	prefix := "🤖 AI:     "
+	prefix := "🤖 AI"
 	style := senseiStyle
 	if role == session.RoleUser {
-		prefix = "Tú:       "
+		prefix = "Tú"
 		style = userStyle
 	}
 
-	prefixWidth := runewidth.StringWidth(prefix)
-	contentWidth := width - prefixWidth
-	if contentWidth < 1 {
-		contentWidth = 1
-	}
-
-	wrappedLines := wrapTextByWidth(content, contentWidth)
+	header := style.Bold(true).Render(prefix)
+	wrappedLines := wrapTextByWidth(content, width)
 	if len(wrappedLines) == 0 {
 		wrappedLines = []string{""}
 	}
 
-	lines := make([]string, 0, len(wrappedLines))
-	lines = append(lines, style.Render(prefix)+wrappedLines[0])
-	indent := strings.Repeat(" ", prefixWidth)
-	for _, line := range wrappedLines[1:] {
-		lines = append(lines, indent+line)
+	lines := make([]string, 0, len(wrappedLines)+2)
+	lines = append(lines, header)
+	for _, line := range wrappedLines {
+		lines = append(lines, line)
 	}
+	lines = append(lines, "") // blank line for spacing between messages
 
 	return lines
 }
@@ -140,6 +139,10 @@ func (m Model) renderChatInputLine() string {
 func (m Model) renderChatStatusLine() string {
 	if m.chatLoading {
 		return spinnerStyle.Render(m.spinner.View() + " pensando...")
+	}
+
+	if m.statusNotification != "" {
+		return infoStyle.Render(m.statusNotification)
 	}
 
 	scroll := m.clampChatScroll()
